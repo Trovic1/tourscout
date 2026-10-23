@@ -48,5 +48,4 @@ AGENTS.md
 skills-lock.json
 
 # design tooling (local)
-.impeccable/review/
-.impeccable/mocks/
+.impeccable/
