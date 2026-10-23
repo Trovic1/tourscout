@@ -50,3 +50,7 @@ skills-lock.json
 
 # design tooling (local)
 .impeccable/
+
+# reference material (not ours to redistribute)
+qloo-docs/
+shots/

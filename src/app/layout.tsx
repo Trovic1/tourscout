@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Archivo, Big_Shoulders_Stencil } from "next/font/google";
+import { Archivo, Saira_Stencil } from "next/font/google";
 import "./globals.css";
 
 const archivo = Archivo({
@@ -8,10 +8,10 @@ const archivo = Archivo({
   axes: ["wdth"],
 });
 
-const stencil = Big_Shoulders_Stencil({
+const stencil = Saira_Stencil({
   variable: "--font-bss",
   subsets: ["latin"],
-  weight: ["600", "800", "900"],
+  axes: ["wdth"],
 });
 
 export const metadata: Metadata = {

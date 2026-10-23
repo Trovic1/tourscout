@@ -90,7 +90,7 @@ export class Toolkit {
       for (const l of leads) if (!this.state.cities.some((c) => c.id === l.id)) this.state.cities.push(l);
       this.state.cities.sort((a, b) => b.affinity - a.affinity);
       return [
-        leads.map(({ id, name, country, affinity }) => ({ id, name, country, affinity: +affinity.toFixed(3) })),
+        leads.map(({ id, name, country, affinity }) => ({ id, name, country, affinity: Math.round(affinity * 100) })),
         `${leads.length} cities · top: ${leads.slice(0, 3).map((l) => l.name).join(", ")}`,
       ];
     });
@@ -135,8 +135,8 @@ export class Toolkit {
       return [
         {
           city,
-          hotspots: hotspots.slice(0, 3).map((h) => ({ lat: +h.lat.toFixed(3), lng: +h.lng.toFixed(3), affinity: +h.affinity.toFixed(2) })),
-          venues: venues.map((v) => ({ name: v.name, affinity: v.affinity, neighborhood: v.neighborhood })),
+          hotspots: hotspots.slice(0, 3).map((h) => ({ lat: +h.lat.toFixed(3), lng: +h.lng.toFixed(3), affinity: Math.round(h.affinity * 100) })),
+          venues: venues.map((v) => ({ name: v.name, affinity: v.affinity === undefined ? undefined : Math.round(v.affinity * 100), neighborhood: v.neighborhood })),
         },
         `${hotspots.length} heat cells · ${venues.length} venues${venues[0] ? ` (best: ${venues[0].name})` : ""}`,
       ];
@@ -160,7 +160,7 @@ export class Toolkit {
         });
         const fresh = ents.filter((e) => e.id !== act.id && !this.state.coHeadliners.some((c) => c.id === e.id));
         this.state.coHeadliners.push(...fresh);
-        return [fresh.map((e) => ({ name: e.name, affinity: e.affinity, popularity: e.popularity })), `${fresh.length} acts · ${fresh.slice(0, 3).map((e) => e.name).join(", ")}`];
+        return [fresh.map((e) => ({ name: e.name, affinity: e.affinity === undefined ? undefined : Math.round(e.affinity * 100), popularity: e.popularity === undefined ? undefined : Math.round(e.popularity * 100) })), `${fresh.length} acts · ${fresh.slice(0, 3).map((e) => e.name).join(", ")}`];
       },
     );
   }
@@ -175,7 +175,7 @@ export class Toolkit {
         take,
       });
       this.state.sponsors = ents;
-      return [ents.map((e) => ({ id: e.id, name: e.name, affinity: e.affinity })), `${ents.length} brands · ${ents.slice(0, 3).map((e) => e.name).join(", ")}`];
+      return [ents.map((e) => ({ id: e.id, name: e.name, affinity: e.affinity === undefined ? undefined : Math.round(e.affinity * 100) })), `${ents.length} brands · ${ents.slice(0, 3).map((e) => e.name).join(", ")}`];
     });
   }
 
@@ -226,7 +226,7 @@ export class Toolkit {
         });
         const fresh = ents.filter((e) => !this.state.lineup.some((l) => l.id === e.id));
         this.state.lineup.push(...fresh);
-        return [fresh.map((e) => ({ name: e.name, affinity: e.affinity, popularity: e.popularity })), `${fresh.length} acts · ${fresh.slice(0, 3).map((e) => e.name).join(", ")}`];
+        return [fresh.map((e) => ({ name: e.name, affinity: e.affinity === undefined ? undefined : Math.round(e.affinity * 100), popularity: e.popularity === undefined ? undefined : Math.round(e.popularity * 100) })), `${fresh.length} acts · ${fresh.slice(0, 3).map((e) => e.name).join(", ")}`];
       },
     );
   }
@@ -253,30 +253,47 @@ export class Toolkit {
 
 /* ------------------------------ routing ------------------------------ */
 
-/** Greedy nearest-neighbour route that starts at the strongest market. */
+const pathKm = (r: CityLead[]) => r.slice(1).reduce((a, c, i) => a + km(r[i], c), 0);
+
+/** Nearest-neighbour from the strongest market, then 2-opt to remove crossings.
+ * The first stop stays fixed: the tour opens where the audience is strongest. */
 export function orderRoute(cities: CityLead[]): CityLead[] {
   if (cities.length < 3) return cities;
   const left = [...cities];
-  const out = [left.shift()!];
+  let out = [left.shift()!];
   while (left.length) {
     const last = out[out.length - 1];
     let best = 0;
     for (let i = 1; i < left.length; i++) if (km(last, left[i]) < km(last, left[best])) best = i;
     out.push(left.splice(best, 1)[0]);
   }
+  for (let improved = true, guard = 0; improved && guard < 50; guard++) {
+    improved = false;
+    for (let i = 1; i < out.length - 1; i++)
+      for (let j = i + 1; j < out.length; j++) {
+        const next = [...out.slice(0, i), ...out.slice(i, j + 1).reverse(), ...out.slice(j + 1)];
+        if (pathKm(next) + 1 < pathKm(out)) {
+          out = next;
+          improved = true;
+        }
+      }
+  }
   return out;
 }
 
+/** Festive dead zone: promoters rarely route shows Dec 20 - Jan 6. */
+const dead = (d: Date) => (d.getUTCMonth() === 11 && d.getUTCDate() >= 20) || (d.getUTCMonth() === 0 && d.getUTCDate() <= 6);
+
 export function scheduleRoute(cities: CityLead[], start = new Date()): TourStop[] {
   const d = new Date(start);
-  d.setUTCMonth(d.getUTCMonth() + 3, 1);
-  // first Friday three months out
-  while (d.getUTCDay() !== 5) d.setUTCDate(d.getUTCDate() + 1);
+  d.setUTCDate(d.getUTCDate() + 84); // ~12 weeks of lead time to hold rooms
+  while (d.getUTCDay() !== 4) d.setUTCDate(d.getUTCDate() + 1); // open on a Thursday
   return cities.map((c, i) => {
     if (i > 0) {
       const hop = km(cities[i - 1], c);
       d.setUTCDate(d.getUTCDate() + (hop > 3000 ? 4 : hop > 800 ? 3 : 2));
     }
+    while (dead(d)) d.setUTCDate(d.getUTCDate() + 1);
     return { cityId: c.id, date: d.toISOString().slice(0, 10), venue: c.venues?.[0] };
   });
 }

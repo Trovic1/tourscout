@@ -64,6 +64,8 @@ function systemPrompt(req: PlanRequest) {
   const common = `You are TourScout, a touring strategist for the live-entertainment industry. Today is ${today}.
 You have no opinions about where people live or what they like: every claim must come from the Qloo taste-graph tools.
 Work efficiently: call independent tools in parallel when possible. Never invent cities, venues, acts or brands.
+Affinity and popularity are 0-100 scores; always quote them that way (e.g. "affinity 94"), never as decimals.
+City notes must add information the numbers do not already show (rank, neighbourhood clusters, routing logic, opportunity), not restate the score.
 Finish by calling finalize_plan exactly once.`;
   if (req.mode === "act")
     return `${common}
@@ -133,6 +135,16 @@ async function geminiAgent(req: PlanRequest, kit: Toolkit, emit: Emit): Promise<
 
 /* ---------- deterministic fallback: same tools, template narrative ---------- */
 
+const ORD = ["1st", "2nd", "3rd"];
+function whyCity(c: CityLead, i: number, n: number, act: string) {
+  const rank = ORD[i] ?? `${i + 1}th`;
+  const hot = c.hotspots?.filter((h) => h.affinity > 0.8).length ?? 0;
+  const parts = [`Ranks ${rank} of ${n} markets for ${act}'s audience.`];
+  if (hot) parts.push(`Fans cluster in ${hot} high-affinity districts, so one well-placed room can carry the night.`);
+  else if (i >= 3) parts.push("Under-served relative to its taste match: a strong test market.");
+  return parts.join(" ");
+}
+
 async function rulesAgent(req: PlanRequest, kit: Toolkit): Promise<Narrative> {
   const s = kit.state;
   if (req.mode === "act") {
@@ -150,8 +162,8 @@ async function rulesAgent(req: PlanRequest, kit: Toolkit): Promise<Narrative> {
     const surprise = pick.find((c, i) => i > 2 && c.countryCode && c.countryCode !== top?.countryCode) ?? pick[3];
     return {
       headline: `${act.name}: The Affinity Tour`,
-      summary: `${act.name}'s audience over-indexes most in ${top?.name} (affinity ${top?.affinity.toFixed(2)}). ${surprise ? `${surprise.name} ranks higher than its market size suggests, which makes it a strong opportunity.` : ""}`,
-      city_notes: pick.map((c) => ({ city: c.name, why: `Taste affinity ${c.affinity.toFixed(2)} with ${act.name}'s fans${c.venues?.[0] ? `; best-matched room: ${c.venues[0].name}` : ""}.` })),
+      summary: `${act.name}'s audience over-indexes most in ${top?.name} (affinity ${Math.round((top?.affinity ?? 0) * 100)}). ${surprise ? `${surprise.name} ranks higher than its market size suggests, which makes it a strong opportunity.` : ""}`,
+      city_notes: pick.map((c, i) => ({ city: c.name, why: whyCity(c, i, s.cities.length, act.name) })),
       route_cities: pick.map((c) => c.name),
       booking_pitch: `Hi — we're routing ${act.name} and Qloo's taste data puts your market in our top ${pick.length} worldwide by audience affinity. We'd love to hold a date. Can we talk avails?`,
       sponsor_pitch: `Hi — ${act.name}'s audience shows one of the strongest taste overlaps we measured with ${s.sponsors[0]?.name ?? "your brand"}. We'd like to explore a tour partnership across ${pick.slice(0, 4).map((c) => c.name).join(", ")}.`,

@@ -32,10 +32,10 @@ export function stopStatus(c: CityLead, run: CityLead[]): StopStatus {
   return "scout";
 }
 
-export const STATUS_META: Record<StopStatus, { label: string; color: string; form: string; note: string }> = {
-  anchor: { label: "Anchor", color: "var(--color-tape-green)", form: "tape-solid", note: "Strongest taste match. Headline here." },
-  hold: { label: "Hold", color: "var(--color-tape-yellow)", form: "tape-dashed", note: "Solid match. Hold a date." },
-  scout: { label: "Scout", color: "var(--color-tape-red)", form: "tape-chevron", note: "Emerging market. Test with a smaller room." },
+export const STATUS_META: Record<StopStatus, { label: string; color: string; hex: string; form: string; note: string }> = {
+  anchor: { label: "Anchor", color: "var(--color-tape-white)", hex: "#f2f0ea", form: "tape-solid", note: "Strongest taste match in the run. Propose the headline date here." },
+  hold: { label: "Hold", color: "var(--color-tape-red)", hex: "#ec5a43", form: "tape-dashed", note: "Solid match. Ask the promoter for a hold." },
+  scout: { label: "Scout", color: "var(--color-alu-400)", hex: "#a9afb5", form: "tape-chevron", note: "Emerging market. Test it in a smaller room." },
 };
 
 export function fmtDate(iso: string) {
@@ -53,6 +53,9 @@ export function runCities(plan: TourPlan): CityLead[] {
 }
 
 export const pct = (v?: number) => (v === undefined ? "—" : `${Math.round(v * 100)}`);
+
+/** Affinity is always shown on one 0-100 scale. */
+export const score = (v: number) => Math.round(v * 100);
 
 export const AGE_LABELS: Record<string, string> = {
   "24_and_younger": "≤24",

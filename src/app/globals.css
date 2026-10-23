@@ -2,12 +2,12 @@
 
 /* Road Case: matte laminate, brushed aluminium, stencil codes, spike tape. */
 @theme {
-  --color-case-950: #0d0d0d;
-  --color-case-900: #141414;
-  --color-case-850: #191919;
-  --color-case-800: #1f1f1f;
-  --color-case-700: #2a2a2a;
-  --color-case-600: #3a3a3a;
+  --color-case-950: #121212;
+  --color-case-900: #1a1a1a;
+  --color-case-850: #1f1f1f;
+  --color-case-800: #242424;
+  --color-case-700: #303234;
+  --color-case-600: #43474b;
   --color-alu-500: #8d9399;
   --color-alu-400: #a9afb5;
   --color-alu-300: #c4c9ce;
@@ -15,10 +15,10 @@
   --color-chalk-dim: #b8b5ad;
 
   /* spike tape: every colour has one job */
-  --color-tape-yellow: #f2c230; /* selected / next / route */
-  --color-tape-red: #ec5a43; /* alert / scout */
+  --color-tape-yellow: #f2c230; /* selected / next only */
+  --color-tape-red: #ec5a43; /* alert / hold */
   --color-tape-blue: #4f86f0; /* data series */
-  --color-tape-green: #4fbf68; /* anchor / strong */
+  --color-tape-white: #f2f0ea; /* anchor: white gaff tape */
 
   --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
   --font-stencil: var(--font-bss), var(--font-archivo), sans-serif;
@@ -62,7 +62,9 @@ input {
 
 .stencil {
   font-family: var(--font-stencil);
-  letter-spacing: 0.02em;
+  font-stretch: 75%;
+  font-weight: 800;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -74,10 +76,32 @@ input {
 .laminate {
   background-color: var(--color-case-900);
   background-image:
-    radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.025) 1px, transparent 0),
-    linear-gradient(180deg, rgb(255 255 255 / 0.02), transparent 40%);
+    radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.05) 0.8px, transparent 0),
+    linear-gradient(180deg, rgb(255 255 255 / 0.035), transparent 55%);
   background-size: 3px 3px, 100% 100%;
 }
+
+/* Aluminium edging: the divider system between case panels. */
+.alu-t,
+.alu-b,
+.alu-l,
+.alu-r {
+  position: relative;
+}
+.alu-t::before,
+.alu-b::after,
+.alu-l::before,
+.alu-r::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  background: linear-gradient(90deg, #5d6268, #b9bec4 20%, #7d838a 45%, #c9cdd1 70%, #6f757b);
+  opacity: 0.55;
+}
+.alu-t::before { inset: 0 0 auto 0; height: 2px; }
+.alu-b::after { inset: auto 0 0 0; height: 2px; }
+.alu-l::before { inset: 0 auto 0 0; width: 2px; background: linear-gradient(180deg, #5d6268, #b9bec4 25%, #7d838a 50%, #c9cdd1 75%, #6f757b); }
+.alu-r::after { inset: 0 0 0 auto; width: 2px; background: linear-gradient(180deg, #5d6268, #b9bec4 25%, #7d838a 50%, #c9cdd1 75%, #6f757b); }
 
 /* Brushed aluminium edging used for rails and dividers. */
 .alu-rail {
@@ -107,6 +131,12 @@ input {
 }
 .tape-chevron {
   background: repeating-linear-gradient(135deg, currentColor 0 4px, transparent 4px 9px);
+}
+
+/* Case-lid label plate */
+.plate {
+  background: linear-gradient(180deg, #232323, #1c1c1c);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 1px 2px rgb(0 0 0 / 0.5);
 }
 
 @keyframes tape-lay {

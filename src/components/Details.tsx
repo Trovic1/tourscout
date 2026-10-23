@@ -27,7 +27,7 @@ export function Details({ plan, selected, onSelect }: { plan: TourPlan; selected
   const current = tabs.some((t) => t.id === tab) ? tab : tabs[0].id;
 
   return (
-    <section className="laminate border-t border-case-700">
+    <section className="laminate alu-t">
       <div role="tablist" aria-label="Plan details" className="flex gap-1 overflow-x-auto border-b border-case-700 px-4 sm:px-6">
         {tabs.map((t) => {
           const on = t.id === current;
@@ -89,12 +89,12 @@ function Markets({ plan, selected, onSelect }: { plan: TourPlan; selected?: stri
             <th className={`${th} w-12`}>#</th>
             <th className={th}>
               <button onClick={() => setSort("name")} className={sort === "name" ? "text-chalk" : "hover:text-chalk"}>
-                Market {sort === "name" && "↓"}
+                Market {sort === "name" && <SortIcon />}
               </button>
             </th>
             <th className={`${th} w-[40%]`}>
               <button onClick={() => setSort("affinity")} className={sort === "affinity" ? "text-chalk" : "hover:text-chalk"}>
-                Taste affinity {sort === "affinity" && "↓"}
+                Taste affinity {sort === "affinity" && <SortIcon />}
               </button>
             </th>
             <th className={th}>In run</th>
@@ -154,7 +154,7 @@ function CityHeat({ city }: { city: CityLead }) {
   return (
     <svg viewBox={`0 0 ${S} ${S}`} className="aspect-square w-full max-w-[320px] bg-case-950" role="img" aria-label={`Fan hotspots in ${city.name}`}>
       {pts.map((p, i) => (
-        <circle key={i} cx={x(p.lng)} cy={y(p.lat)} r={6 + p.affinity * 16} fill="#f2c230" opacity={0.08 + p.affinity * 0.32} />
+        <circle key={i} cx={x(p.lng)} cy={y(p.lat)} r={6 + p.affinity * 16} fill="#4f86f0" opacity={0.08 + p.affinity * 0.34} />
       ))}
       {venues.map((v, i) => (
         <g key={v.id} transform={`translate(${x(v.lng!)},${y(v.lat!)})`}>
@@ -193,7 +193,7 @@ function Venues({ plan, selected, onSelect }: { plan: TourPlan; selected?: strin
       <div className="grid gap-6 md:grid-cols-[320px_1fr]">
         <div className="flex flex-col gap-2">
           <CityHeat city={city} />
-          <p className="text-[12px] text-alu-400">Yellow glow: where {plan.act?.name ?? "this market"}&apos;s taste concentrates (Qloo heatmap). Numbered squares: venues.</p>
+          <p className="text-[12px] text-alu-400">Blue glow: where {plan.act?.name ?? "this market"}&apos;s taste concentrates (Qloo heatmap). Numbered squares: venues.</p>
         </div>
         <ol className="flex flex-col divide-y divide-case-700 border-y border-case-700">
           {(city.venues ?? []).map((v, i) => (
@@ -203,7 +203,7 @@ function Venues({ plan, selected, onSelect }: { plan: TourPlan; selected?: strin
                 <span className="block truncate text-[15px] font-semibold">{v.name}</span>
                 <span className="block truncate text-[12px] text-alu-400">{[v.neighborhood, v.address ?? v.city].filter(Boolean).join(" · ") || city.name}</span>
               </span>
-              <AffinityBar v={v.affinity} color="var(--color-tape-yellow)" />
+              <AffinityBar v={v.affinity} />
             </li>
           ))}
           {!city.venues?.length && <li className="py-3 text-[14px] text-alu-400">No matched venues returned for {city.name}.</li>}
@@ -225,7 +225,7 @@ function Acts({ list, act }: { list: Entity[]; act: boolean }) {
             <span className="min-w-0">
               <span className="block truncate text-[15px] font-semibold">{e.name}</span>
               <span className="text-[12px] text-alu-400">
-                {rising ? <span className="font-semibold text-tape-red">Rising · affordable {act ? "support" : "booking"}</span> : act ? "Co-headline calibre" : "Proven draw"}
+                {rising ? <span className="font-semibold text-tape-blue">Rising · affordable {act ? "support" : "booking"}</span> : act ? "Co-headline calibre" : "Proven draw"}
                 {e.popularity !== undefined && ` · popularity ${pct(e.popularity)}`}
               </span>
             </span>
@@ -248,7 +248,7 @@ function Sponsors({ plan }: { plan: TourPlan }) {
             <span className="block text-[15px] font-semibold">{b.name}</span>
             {b.angle && <span className="block text-[13px] text-chalk-dim">{b.angle}</span>}
           </span>
-          <AffinityBar v={b.affinity} color="var(--color-tape-green)" />
+          <AffinityBar v={b.affinity} />
         </li>
       ))}
     </ol>
@@ -341,5 +341,13 @@ function Pitch({ title, body }: { title: string; body: string }) {
       </header>
       <p className="whitespace-pre-line px-4 py-4 text-[15px] leading-relaxed text-chalk">{body}</p>
     </article>
+  );
+}
+
+function SortIcon() {
+  return (
+    <svg aria-label="sorted descending" width="10" height="10" viewBox="0 0 10 10" className="ml-1 inline-block align-[-1px]">
+      <path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square" />
+    </svg>
   );
 }
