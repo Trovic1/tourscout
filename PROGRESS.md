@@ -16,7 +16,8 @@ Qloo Agentic Hackathon · deadline **Oct 30, 2026, 11:45 pm ET** (Oct 31, 04:45 
 - [x] Production build passes
 - [ ] Get Gemini key (free) → test the real agent loop
 - [ ] Qloo key arrives → verify live payload shapes, venue tag, destination coordinates; tune normaliser
-- [ ] Create GitHub repo (public, with license visible) and push
-- [ ] Deploy to Vercel with env vars; smoke-test the hosted URL
+- [x] Public repo: https://github.com/Trovic1/tourscout (MIT detected)
+- [x] Deployed (demo data): https://tourscout-iota.vercel.app; smoke-tested
+- [ ] Add QLOO_API_KEY + GEMINI_API_KEY in Vercel env, redeploy, re-test
 - [ ] Devpost submission text + screenshots
 - [ ] Pitch prep in case we make the top 3 (live show Nov 5)
