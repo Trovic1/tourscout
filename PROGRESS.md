@@ -12,7 +12,8 @@ Qloo Agentic Hackathon · deadline **Oct 30, 2026, 11:45 pm ET** (Oct 31, 04:45 
 - [x] README, LICENSE (MIT), .env.example
 
 ## Left
-- [ ] Design finish review fixes
+- [x] Design finish review: 2 rounds, all 8 fixes + 3 regressions resolved; DESIGN.md written
+- [x] Production build passes
 - [ ] Get Gemini key (free) → test the real agent loop
 - [ ] Qloo key arrives → verify live payload shapes, venue tag, destination coordinates; tune normaliser
 - [ ] Create GitHub repo (public, with license visible) and push
