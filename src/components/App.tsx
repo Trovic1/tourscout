@@ -275,7 +275,6 @@ function LeadPanel({ plan, city, run }: { plan: TourPlan; city: CityLead; run: C
   const st = idx >= 0 ? stopStatus(city, run) : undefined;
   const stop = idx >= 0 ? plan.route[idx] : undefined;
   const date = stop ? fmtDate(stop.date) : undefined;
-  const hot = city.hotspots?.filter((h) => h.affinity > 0.8).length;
 
   return (
     <aside key={city.id} className="laminate order-2 flex min-h-0 flex-col overflow-x-hidden lg:order-none lg:overflow-y-auto">
@@ -338,11 +337,7 @@ function LeadPanel({ plan, city, run }: { plan: TourPlan; city: CityLead; run: C
           ) : (
             <p className="text-[14px] text-alu-400">The agent did not scan venues here. It scans the strongest markets first.</p>
           )}
-          {hot ? (
-            <p className="tnum mt-2 text-[13px] text-alu-400">
-              {hot} high-affinity districts on Qloo&apos;s heatmap. See Venues &amp; hotspots below.
-            </p>
-          ) : null}
+          {city.hotspots?.length ? <p className="mt-2 text-[13px] text-alu-400">Fan heatmap and all matched rooms: see Venues &amp; hotspots below.</p> : null}
         </div>
       </div>
     </aside>
@@ -374,7 +369,7 @@ function RunList({ plan, run, selected, onSelect }: { plan: TourPlan; run: CityL
           {days} of {TOUR_WINDOW_DAYS} days · {run.length} shows · {Math.round(dist).toLocaleString("en-GB")} km
         </p>
       </div>
-      <ol className="min-h-0 flex-1 overflow-y-auto">
+      <ol className="min-h-0 flex-1 overflow-y-auto [mask-image:linear-gradient(to_bottom,black_calc(100%-36px),transparent)] pb-6">
         {plan.route.map((s, i) => {
           const c = run[i];
           if (!c) return null;
@@ -387,7 +382,7 @@ function RunList({ plan, run, selected, onSelect }: { plan: TourPlan; run: CityL
               <button
                 onClick={() => onSelect(c.id)}
                 aria-current={on ? "true" : undefined}
-                className={`grid w-full grid-cols-[3.4rem_1fr] gap-3 border-b border-case-700 px-5 py-3 text-left transition-colors ${on ? "bg-case-800" : "hover:bg-case-850"}`}
+                className={`grid w-full grid-cols-[3.4rem_1fr] gap-3 border-b border-case-700 px-5 py-2.5 text-left transition-colors ${on ? "bg-case-800" : "hover:bg-case-850"}`}
               >
                 <span className="flex flex-col items-start leading-none">
                   <span className="text-[10px] font-bold tracking-[0.1em] text-alu-400">{d.dow}</span>

@@ -29,15 +29,15 @@ interface Props {
   insetBottom?: number;
 }
 
-const CHIP_W = 62;
+const CHIP_W = 74;
 const CHIP_H = 28;
 const TAPE = 7;
 
 /** Spike tape is laid by status: solid white gaff (anchor), dashed red (hold), chevron aluminium (scout). */
 function tapeStroke(st: StopStatus) {
-  if (st === "hold") return { stroke: STATUS_META.hold.hex, dash: "14 7" };
-  if (st === "scout") return { stroke: "url(#chevron)", dash: undefined };
-  return { stroke: STATUS_META.anchor.hex, dash: undefined };
+  if (st === "hold") return { stroke: STATUS_META.hold.hex, dash: "14 9", cap: "butt" as const };
+  if (st === "scout") return { stroke: "url(#chevron)", dash: undefined, cap: "square" as const };
+  return { stroke: STATUS_META.anchor.hex, dash: undefined, cap: "square" as const };
 }
 
 export function RouteMap({ run, others, selected, onSelect, playKey, insetTop = 0, insetBottom = 0 }: Props) {
@@ -165,7 +165,7 @@ export function RouteMap({ run, others, selected, onSelect, playKey, insetTop = 
                 fill="none"
                 stroke={t.stroke}
                 strokeWidth={TAPE}
-                strokeLinecap="square"
+                strokeLinecap={t.cap}
                 strokeDasharray={t.dash}
                 strokeOpacity={0.95}
                 mask={`url(#lay-${i})`}
