@@ -1,4 +1,5 @@
 import { qloo, type QlooSource } from "./qloo";
+import { km } from "./geo";
 import type { AgentEvent, AudienceProfile, CityLead, Entity, SponsorLead, TourStop } from "./types";
 
 /** Everything the agent has learned so far. The final plan is assembled from this, so
@@ -126,7 +127,7 @@ export class Toolkit {
           })
           .catch(() => [] as Entity[]),
       ]);
-      const hotspots = [...heat].sort((a, b) => b.affinity - a.affinity).slice(0, 8);
+      const hotspots = [...heat].sort((a, b) => b.affinity - a.affinity).slice(0, 40);
       if (lead) {
         lead.hotspots = hotspots;
         lead.venues = venues;
@@ -137,7 +138,7 @@ export class Toolkit {
           hotspots: hotspots.slice(0, 3).map((h) => ({ lat: +h.lat.toFixed(3), lng: +h.lng.toFixed(3), affinity: +h.affinity.toFixed(2) })),
           venues: venues.map((v) => ({ name: v.name, affinity: v.affinity, neighborhood: v.neighborhood })),
         },
-        `${hotspots.length} hotspots · ${venues.length} venues${venues[0] ? ` (best: ${venues[0].name})` : ""}`,
+        `${hotspots.length} heat cells · ${venues.length} venues${venues[0] ? ` (best: ${venues[0].name})` : ""}`,
       ];
     });
   }
@@ -251,15 +252,6 @@ export class Toolkit {
 }
 
 /* ------------------------------ routing ------------------------------ */
-
-const toRad = (d: number) => (d * Math.PI) / 180;
-export function km(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const R = 6371;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
 
 /** Greedy nearest-neighbour route that starts at the strongest market. */
 export function orderRoute(cities: CityLead[]): CityLead[] {

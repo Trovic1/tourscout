@@ -46,3 +46,7 @@ next-env.d.ts
 CLAUDE.md
 AGENTS.md
 skills-lock.json
+
+# design tooling (local)
+.impeccable/review/
+.impeccable/mocks/
