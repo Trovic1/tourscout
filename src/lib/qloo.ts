@@ -29,10 +29,17 @@ async function get<T>(path: string, params: Params): Promise<T> {
   const hit = cache.get(url);
   if (hit && Date.now() - hit.at < TTL) return hit.data as T;
 
-  const res = await fetch(url, {
-    headers: { "X-Api-Key": key, accept: "application/json" },
-    signal: AbortSignal.timeout(15000),
-  });
+  // The hackathon key is rate-limited; bursts of parallel calls get 429s, so back off and retry.
+  let res: Response | undefined;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    res = await fetch(url, {
+      headers: { "X-Api-Key": key, accept: "application/json" },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (res.status !== 429 && res.status < 500) break;
+    await new Promise((r) => setTimeout(r, 500 * 2 ** attempt + Math.random() * 250));
+  }
+  if (!res) throw new Error(`Qloo ${path}: no response`);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`Qloo ${path} ${res.status}: ${body.slice(0, 200)}`);
