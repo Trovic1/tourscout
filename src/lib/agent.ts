@@ -212,7 +212,10 @@ async function rulesAgent(req: PlanRequest, kit: Toolkit): Promise<Narrative> {
 function assemble(req: PlanRequest, kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]): TourPlan {
   const s = kit.state;
   const notes = new Map(n.city_notes?.map((c) => [c.city.toLowerCase(), c.why]) ?? []);
-  for (const c of s.cities) c.why = notes.get(c.name.toLowerCase()) ?? c.why;
+  // The model notes only some cities; the rest get the rule-based note so no stop is left blank.
+  s.cities.forEach((c, i) => {
+    c.why = notes.get(c.name.toLowerCase()) ?? c.why ?? (s.act ? whyCity(c, i, s.cities.length, s.act.name) : undefined);
+  });
 
   let routeCities: CityLead[] = [];
   if (req.mode === "act") {
