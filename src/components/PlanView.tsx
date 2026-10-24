@@ -66,7 +66,7 @@ export function PlanView({ plan, steps, notes, state }: Props) {
 
       {/* route: the screen's answer */}
       <div className="mt-[14px] grid gap-[14px] lg:grid-cols-12">
-        <section className="relative h-[320px] overflow-hidden rounded-[20px] bg-surface sm:h-[420px] lg:col-span-8 lg:h-auto lg:min-h-[440px]" aria-labelledby="route-h">
+        <section className="relative h-[320px] overflow-hidden rounded-[20px] bg-surface sm:h-[420px] lg:col-span-8 lg:h-auto lg:min-h-[340px]" aria-labelledby="route-h">
           <h2 id="route-h" className="pointer-events-none absolute top-[22px] left-[22px] z-10 text-[16px] font-semibold">
             Route
           </h2>
