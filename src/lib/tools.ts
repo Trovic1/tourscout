@@ -13,7 +13,6 @@ export interface ToolState {
   lineup: Entity[];
   sponsors: SponsorLead[];
   audience?: AudienceProfile;
-  venueTag?: string | null;
 }
 
 type Emit = (e: AgentEvent) => void;
@@ -56,14 +55,16 @@ export class Toolkit {
     return this.run("find_act", `Looking up “${name}” in Qloo's taste graph`, { name }, async () => {
       const hits = await this.q.search(name, ACT_TYPES, 5);
       if (!hits.length) throw new Error(`No act named ${name}`);
-      const exact = hits.find((h) => h.name.toLowerCase() === name.toLowerCase());
+      const same = hits.filter((h) => h.name.toLowerCase() === name.toLowerCase());
+      // Qloo often has both a person and an artist record; the artist record carries the music taste signal.
+      const exact = same.find((h) => h.kind === "artist") ?? same[0];
       const act = exact ?? hits[0];
       this.state.act = act;
       return [act, `${act.name} (${act.kind})`];
     });
   }
 
-  async rankCities({ take = 14, countryCode }: { take?: number; countryCode?: string }) {
+  async rankCities({ take = 14, countryCode, minPopularity = 0.6 }: { take?: number; countryCode?: string; minPopularity?: number }) {
     const act = this.requireAct();
     const label = countryCode
       ? `Ranking ${countryCode} cities by fan-taste affinity`
@@ -73,10 +74,20 @@ export class Toolkit {
         "filter.type": "urn:entity:destination",
         "signal.interests.entities": act.id,
         "filter.geocode.country_code": countryCode,
+        // Touring needs real markets: without a floor Qloo surfaces villages and resort towns.
+        "filter.popularity.min": countryCode ? Math.min(minPopularity, 0.3) : minPopularity,
         take: Math.min(take, 30),
       });
+      // Qloo can list the same city twice (separate destination records); keep the stronger one.
+      const seen = new Set(this.state.cities.map((c) => `${c.name}|${c.countryCode}`));
       const leads: CityLead[] = ents
         .filter((e) => e.lat !== undefined && e.lng !== undefined)
+        .filter((e) => {
+          const k = `${e.name}|${e.countryCode}`;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
         .map((e) => ({
           id: e.id,
           name: e.name,
@@ -96,36 +107,32 @@ export class Toolkit {
     });
   }
 
-  private async venueTag() {
-    if (this.state.venueTag !== undefined) return this.state.venueTag;
-    try {
-      const tags = await this.q.tags("music venue", 6);
-      const t = tags.find((t) => /venue|concert|music/i.test(t.name));
-      this.state.venueTag = t?.id ?? null;
-    } catch {
-      this.state.venueTag = null;
+  /** Rooms tagged as music venues; where Qloo has none (e.g. Lagos), fall back to concert halls. */
+  private async venuesIn(city: string, signal: string | undefined, take: number): Promise<Entity[]> {
+    for (const tag of VENUE_TAGS) {
+      const found = await this.q
+        .insights({
+          "filter.type": "urn:entity:place",
+          "filter.location.query": city,
+          "filter.tags": tag,
+          "signal.interests.entities": signal,
+          take,
+        })
+        .catch(() => [] as Entity[]);
+      if (found.length) return found;
     }
-    return this.state.venueTag;
+    return [];
   }
 
   async scanCity({ city }: { city: string }) {
     const act = this.requireAct();
     return this.run("scan_city", `Mapping ${act.name} fan hotspots and venues in ${city}`, { city }, async () => {
       const lead = this.state.cities.find((c) => c.name.toLowerCase() === city.toLowerCase());
-      const tag = await this.venueTag();
       const [heat, venues] = await Promise.all([
         this.q
-          .heatmap({ "filter.location.query": city, "signal.interests.entities": act.id, take: 60 })
+          .heatmap({ "filter.location.query": city, "signal.interests.entities": act.id, take: 50 })
           .catch(() => []),
-        this.q
-          .insights({
-            "filter.type": "urn:entity:place",
-            "signal.interests.entities": act.id,
-            "filter.geocode.name": city,
-            "filter.tags": tag ?? undefined,
-            take: 5,
-          })
-          .catch(() => [] as Entity[]),
+        this.venuesIn(city, act.id, 5),
       ]);
       const hotspots = [...heat].sort((a, b) => b.affinity - a.affinity).slice(0, 40);
       if (lead) {
@@ -171,7 +178,7 @@ export class Toolkit {
     return this.run("find_sponsors", `Finding brands whose audience overlaps ${signal.name}'s`, { take }, async () => {
       const ents = await this.q.insights({
         "filter.type": "urn:entity:brand",
-        "signal.interests.entities": signal.id,
+        ...(this.state.act ? { "signal.interests.entities": signal.id } : { "signal.location.query": signal.name }),
         take,
       });
       this.state.sponsors = ents;
@@ -220,7 +227,7 @@ export class Toolkit {
       async () => {
         const ents = await this.q.insights({
           "filter.type": "urn:entity:artist",
-          "signal.interests.entities": m.id,
+          "signal.location.query": m.name,
           "filter.popularity.max": rising ? 0.85 : undefined,
           take,
         });
@@ -235,21 +242,14 @@ export class Toolkit {
     const m = this.state.market;
     if (!m) throw new Error("Call find_market first.");
     return this.run("scan_market", `Scanning live-music venues in ${m.name}`, {}, async () => {
-      const tag = await this.venueTag();
-      const venues = await this.q
-        .insights({
-          "filter.type": "urn:entity:place",
-          "filter.geocode.name": m.name,
-          "filter.tags": tag ?? undefined,
-          "signal.interests.entities": this.state.lineup[0]?.id,
-          take: 6,
-        })
-        .catch(() => [] as Entity[]);
+      const venues = await this.venuesIn(m.name, this.state.lineup[0]?.id, 6);
       m.venues = venues;
       return [venues.map((v) => v.name), `${venues.length} venues`];
     });
   }
 }
+
+const VENUE_TAGS = ["urn:tag:setting:qloo:music_venue", "urn:tag:category:place:concert_hall"];
 
 /* ------------------------------ routing ------------------------------ */
 

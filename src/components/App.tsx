@@ -431,7 +431,7 @@ function MarketBoard({ plan, agent }: { plan: TourPlan; agent: Agent }) {
         <h1 className="text-[clamp(1.6rem,2.6vw,2.4rem)] leading-[1.02] text-balance" style={stencilDisplay}>
           {plan.headline}
         </h1>
-        <p className="mt-2 mb-5 text-[14px] text-alu-400">Acts {m.name}&apos;s audience over-indexes on, on one shared 0–100 affinity scale.</p>
+        <p className="mt-2 mb-5 text-[14px] text-alu-400">Ranked by how strongly {m.name}&apos;s audience over-indexes on each act. Bars show global reach (0–100): short bars are rising acts, cheaper to book.</p>
         <ol className="flex flex-col">
           {lineup.slice(0, 12).map((e, i) => (
             <li key={e.id} className="grid grid-cols-[2.2rem_1fr_minmax(8rem,40%)] items-center gap-3 border-b border-case-700 py-2.5">
@@ -442,9 +442,9 @@ function MarketBoard({ plan, agent }: { plan: TourPlan; agent: Agent }) {
               </span>
               <span className="flex items-center gap-2">
                 <span className="relative h-2 flex-1 bg-case-700">
-                  <span className="absolute inset-y-0 left-0 bg-tape-blue" style={{ width: `${(e.affinity ?? 0) * 100}%` }} />
+                  <span className="absolute inset-y-0 left-0 bg-tape-blue" style={{ width: `${(e.popularity ?? 0) * 100}%` }} />
                 </span>
-                <span className="tnum w-7 text-right text-[13px] font-semibold">{pct(e.affinity)}</span>
+                <span className="tnum w-7 text-right text-[13px] font-semibold">{pct(e.popularity)}</span>
               </span>
             </li>
           ))}
