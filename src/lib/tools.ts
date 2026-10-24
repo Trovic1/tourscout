@@ -228,6 +228,8 @@ export class Toolkit {
         const ents = await this.q.insights({
           "filter.type": "urn:entity:artist",
           "signal.location.query": m.name,
+          // Qloo tags some models, authors and photographers as artists; a reach floor keeps the lineup to working acts.
+          "filter.popularity.min": rising ? 0.4 : 0.6,
           "filter.popularity.max": rising ? 0.85 : undefined,
           take,
         });
