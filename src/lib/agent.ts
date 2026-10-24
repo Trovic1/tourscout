@@ -253,8 +253,7 @@ async function rulesAgent(kit: Toolkit): Promise<Narrative> {
 }
 
 /** Models sometimes write line breaks as a literal backslash-n inside function arguments. */
-const unescape = (s = "") => s.replace(/\n/g, "
-").trim();
+const unescape = (s = "") => s.replace(/\\n/g, "\n").trim();
 
 function assemble(kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]): TourPlan {
   const s = kit.state;
