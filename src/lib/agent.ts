@@ -92,6 +92,26 @@ async function dispatch(kit: Toolkit, name: string, args: Record<string, unknown
   }
 }
 
+// Flash models hit "high demand" 503s at peak times; retry once, then try the next model.
+const MODELS = [...new Set([MODEL, "gemini-3-flash-preview", "gemini-flash-lite-latest"])];
+const transient = (msg: string) => /\b(429|500|503|504)\b|high demand|overloaded|deadline|unavailable|fetch failed/i.test(msg);
+
+async function generate(ai: GoogleGenAI, req: Omit<Parameters<GoogleGenAI["models"]["generateContent"]>[0], "model">) {
+  let last: unknown;
+  for (const model of MODELS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await ai.models.generateContent({ ...req, model });
+      } catch (err) {
+        last = err;
+        if (!transient(err instanceof Error ? err.message : String(err))) throw err;
+        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+      }
+    }
+  }
+  throw last;
+}
+
 async function geminiAgent(req: PlanRequest, kit: Toolkit, emit: Emit): Promise<Narrative | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
@@ -101,8 +121,7 @@ async function geminiAgent(req: PlanRequest, kit: Toolkit, emit: Emit): Promise<
   const contents: Content[] = [{ role: "user", parts: [{ text: req.mode === "act" ? `Plan a tour for ${req.query}.` : `Program the calendar for ${req.query}.` }] }];
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const res = await ai.models.generateContent({
-      model: MODEL,
+    const res = await generate(ai, {
       contents,
       config: { systemInstruction: systemPrompt(req), tools, temperature: 0.4 },
     });
