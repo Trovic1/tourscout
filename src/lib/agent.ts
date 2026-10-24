@@ -4,6 +4,9 @@ import type { AgentEvent, CityLead, Entity, TourPlan } from "./types";
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-latest";
 const MAX_TURNS = 10;
+/** Gemini gets this long in total; after that the rule-based planner finishes from the data
+ * already gathered, so a slow model can never push a run past the server's time limit. */
+const GEMINI_BUDGET_MS = 70_000;
 /** A first run: home plus this many shows. */
 const SHOWS = 6;
 
@@ -113,10 +116,11 @@ async function dispatch(kit: Toolkit, name: string, args: Record<string, unknown
 const MODELS = [...new Set([MODEL, "gemini-3-flash-preview", "gemini-flash-lite-latest"])];
 const transient = (msg: string) => /\b(429|500|503|504)\b|high demand|overloaded|deadline|unavailable|fetch failed/i.test(msg);
 
-async function generate(ai: GoogleGenAI, req: Omit<Parameters<GoogleGenAI["models"]["generateContent"]>[0], "model">) {
+async function generate(ai: GoogleGenAI, req: Omit<Parameters<GoogleGenAI["models"]["generateContent"]>[0], "model">, deadline: number) {
   let last: unknown;
   for (const model of MODELS) {
     for (let attempt = 0; attempt < 2; attempt++) {
+      if (Date.now() > deadline) throw new Error("time budget spent");
       try {
         return await ai.models.generateContent({ ...req, model });
       } catch (err) {
@@ -134,11 +138,13 @@ async function geminiAgent(req: PlanRequest, kit: Toolkit, emit: Emit): Promise<
   if (!key) return null;
   // A hung connection should fall back to the rule-based planner fast, not stall the run.
   const ai = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 25000 } });
+  const deadline = Date.now() + GEMINI_BUDGET_MS;
   const tools = [{ functionDeclarations: [...TOOLS, FINALIZE] }];
   const contents: Content[] = [{ role: "user", parts: [{ text: "Plan the first tour." }] }];
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const res = await generate(ai, { contents, config: { systemInstruction: systemPrompt(req, kit), tools, temperature: 0.4 } });
+    if (Date.now() > deadline) throw new Error("time budget spent");
+    const res = await generate(ai, { contents, config: { systemInstruction: systemPrompt(req, kit), tools, temperature: 0.4 } }, deadline);
     const parts = res.candidates?.[0]?.content?.parts ?? [];
     contents.push({ role: "model", parts });
     const text = parts.map((p) => p.text).filter(Boolean).join(" ").trim();
