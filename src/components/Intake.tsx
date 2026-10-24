@@ -81,7 +81,7 @@ export function Intake({ state, steps, notes, error, onPlan }: Props) {
             {running ? "Planning…" : "Plan my first run"}
           </button>
           <p className={`text-[13px] ${tried && missing ? "text-negative" : "text-faint"}`}>
-            {tried && missing ? missing : "Takes about a minute. Every city, room and act comes from Qloo's data."}
+            {tried && missing ? missing : "Takes under a minute. Every city, room and act comes from Qloo's data."}
           </p>
         </div>
         {error && state === "error" && (

@@ -252,6 +252,10 @@ async function rulesAgent(kit: Toolkit): Promise<Narrative> {
   };
 }
 
+/** Models sometimes write line breaks as a literal backslash-n inside function arguments. */
+const unescape = (s = "") => s.replace(/\n/g, "
+").trim();
+
 function assemble(kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]): TourPlan {
   const s = kit.state;
   const refs = s.refs.map((r) => r.name).join(" + ");
@@ -284,7 +288,7 @@ function assemble(kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]):
     billMates: s.billMates,
     sponsors: s.sponsors.map((b) => ({ ...b, angle: angles.get(b.name.toLowerCase()) })),
     audience: s.audience,
-    pitches: { venue: n.venue_pitch, sponsor: n.sponsor_pitch },
+    pitches: { venue: unescape(n.venue_pitch), sponsor: unescape(n.sponsor_pitch) },
     dataSource: kit.q.live ? "qloo-live" : "qloo-mock",
     reasoning,
   };
