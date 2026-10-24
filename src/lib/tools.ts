@@ -1,3 +1,4 @@
+import type { Params } from "./qloo";
 import { qloo, type QlooSource } from "./qloo";
 import { km } from "./geo";
 import type { AgentEvent, AudienceProfile, CityLead, Entity, SponsorLead, TourStop } from "./types";
@@ -108,12 +109,12 @@ export class Toolkit {
   }
 
   /** Rooms tagged as music venues; where Qloo has none (e.g. Lagos), fall back to concert halls. */
-  private async venuesIn(city: string, signal: string | undefined, take: number): Promise<Entity[]> {
+  private async venuesIn(where: Params, signal: string | undefined, take: number): Promise<Entity[]> {
     for (const tag of VENUE_TAGS) {
       const found = await this.q
         .insights({
           "filter.type": "urn:entity:place",
-          "filter.location.query": city,
+          ...where,
           "filter.tags": tag,
           "signal.interests.entities": signal,
           take,
@@ -128,11 +129,10 @@ export class Toolkit {
     const act = this.requireAct();
     return this.run("scan_city", `Mapping ${act.name} fan hotspots and venues in ${city}`, { city }, async () => {
       const lead = this.state.cities.find((c) => c.name.toLowerCase() === city.toLowerCase());
+      const where = near(lead) ?? { "filter.location.query": city };
       const [heat, venues] = await Promise.all([
-        this.q
-          .heatmap({ "filter.location.query": city, "signal.interests.entities": act.id, take: 50 })
-          .catch(() => []),
-        this.venuesIn(city, act.id, 5),
+        this.q.heatmap({ ...where, "signal.interests.entities": act.id, take: 50 }).catch(() => []),
+        this.venuesIn(where, act.id, 5),
       ]);
       const hotspots = [...heat].sort((a, b) => b.affinity - a.affinity).slice(0, 40);
       if (lead) {
@@ -235,6 +235,8 @@ export class Toolkit {
         });
         const fresh = ents.filter((e) => !this.state.lineup.some((l) => l.id === e.id));
         this.state.lineup.push(...fresh);
+        // The main and rising lookups can finish in either order; headliners lead, rising acts follow.
+        this.state.lineup.sort((a, b) => Number((b.popularity ?? 0) >= 0.85) - Number((a.popularity ?? 0) >= 0.85) || (b.affinity ?? 0) - (a.affinity ?? 0));
         return [fresh.map((e) => ({ name: e.name, affinity: e.affinity === undefined ? undefined : Math.round(e.affinity * 100), popularity: e.popularity === undefined ? undefined : Math.round(e.popularity * 100) })), `${fresh.length} acts · ${fresh.slice(0, 3).map((e) => e.name).join(", ")}`];
       },
     );
@@ -244,11 +246,17 @@ export class Toolkit {
     const m = this.state.market;
     if (!m) throw new Error("Call find_market first.");
     return this.run("scan_market", `Scanning live-music venues in ${m.name}`, {}, async () => {
-      const venues = await this.venuesIn(m.name, this.state.lineup[0]?.id, 6);
+      const venues = await this.venuesIn(near(m) ?? { "filter.location.query": m.name }, this.state.lineup[0]?.id, 6);
       m.venues = venues;
       return [venues.map((v) => v.name), `${venues.length} venues`];
     });
   }
+}
+
+/** Search by coordinates: names like "Washington" are ambiguous (Qloo resolves it to the state). */
+function near(c?: { lat: number; lng: number }): Params | undefined {
+  if (!c || (!c.lat && !c.lng)) return undefined;
+  return { "filter.location": `POINT(${c.lng} ${c.lat})`, "filter.location.radius": 25000 };
 }
 
 const VENUE_TAGS = ["urn:tag:setting:qloo:music_venue", "urn:tag:category:place:concert_hall"];
