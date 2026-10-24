@@ -156,6 +156,17 @@ function signalName(params: Params) {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Resolve a location filter (name or WKT POINT) to the nearest demo city. */
+function cityFor(params: Record<string, unknown>) {
+  const pt = /POINT(([-d.]+) ([-d.]+))/.exec(String(params["filter.location"] ?? ""));
+  if (pt) {
+    const [lng, lat] = [Number(pt[1]), Number(pt[2])];
+    return [...CITIES].sort((a, b) => Math.hypot(a[4] - lat, a[5] - lng) - Math.hypot(b[4] - lat, b[5] - lng))[0];
+  }
+  const loc = String(params["filter.location.query"] ?? "").toLowerCase();
+  return CITIES.find((c) => c[1].toLowerCase() === loc) ?? CITIES[0];
+}
+
 export const mockQloo: QlooSource = {
   live: false,
   async search(query, types) {
@@ -212,8 +223,7 @@ export const mockQloo: QlooSource = {
       }));
     }
     if (type === "urn:entity:place") {
-      const loc = String(params["filter.location.query"] ?? params["filter.geocode.name"] ?? "");
-      const c = CITIES.find((c) => c[1].toLowerCase() === loc.toLowerCase()) ?? CITIES[0];
+      const c = cityFor(params);
       return c[6].slice(0, take).map((v, i) => ({
         id: idFor(v),
         name: v,
@@ -231,8 +241,7 @@ export const mockQloo: QlooSource = {
 
   async heatmap(params) {
     await sleep(140);
-    const loc = String(params["filter.location.query"] ?? "");
-    const c = CITIES.find((c) => c[1].toLowerCase() === loc.toLowerCase()) ?? CITIES[0];
+    const c = cityFor(params);
     const seed = signalName(params) + c[0];
     const pts: Hotspot[] = [];
     for (let i = 0; i < 40; i++) {
