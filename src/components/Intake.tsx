@@ -51,7 +51,7 @@ export function Intake({ state, steps, notes, error, onPlan }: Props) {
       </p>
 
       <form onSubmit={submit} className="mt-10 rounded-[20px] bg-surface p-[22px]" noValidate>
-        <div className="grid gap-[14px] md:grid-cols-12">
+        <div className="grid grid-cols-1 gap-[14px] md:grid-cols-12">
           <label className="flex flex-col gap-2 md:col-span-3">
             <span className="text-[14px] font-medium">
               Artist name <span className="font-normal text-faint">optional</span>
@@ -101,7 +101,7 @@ export function Intake({ state, steps, notes, error, onPlan }: Props) {
           </div>
         </section>
       ) : (
-        <div className="mt-[14px] grid gap-[14px] md:grid-cols-12">
+        <div className="mt-[14px] grid grid-cols-1 gap-[14px] md:grid-cols-12">
           <section className="rounded-[20px] bg-surface p-[22px] md:col-span-7" aria-labelledby="ex-h">
             <h2 id="ex-h" className="text-[16px] font-semibold">
               Or open an example run
@@ -112,7 +112,7 @@ export function Intake({ state, steps, notes, error, onPlan }: Props) {
                   <button
                     type="button"
                     onClick={() => onPlan({ home: x.home, refs: x.refs })}
-                    className="group flex min-h-[63px] w-full items-center gap-4 rounded-[14px] bg-raised px-4 text-left transition-colors hover:bg-[#242424]"
+                    className="group flex min-h-[63px] w-full items-center gap-4 rounded-[14px] bg-raised px-4 py-3 text-left transition-colors hover:bg-[#242424]"
                   >
                     <span className="flex flex-none -space-x-2.5" aria-hidden>
                       {x.refs.map((r) => (
@@ -127,10 +127,10 @@ export function Intake({ state, steps, notes, error, onPlan }: Props) {
                       ))}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-medium">
+                      <span className="block text-[14px] font-medium">
                         {x.who} from {x.home}
                       </span>
-                      <span className="block truncate text-[13px] text-faint">sounds like {refList(x.refs.map((r) => r.name))}</span>
+                      <span className="block text-[13px] text-faint">sounds like {refList(x.refs.map((r) => r.name))}</span>
                     </span>
                     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden className="flex-none text-faint transition-transform group-hover:translate-x-0.5">
                       <path d="M6 3.5L10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />

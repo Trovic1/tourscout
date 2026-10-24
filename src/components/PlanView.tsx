@@ -65,7 +65,7 @@ export function PlanView({ plan, steps, notes, state }: Props) {
       </dl>
 
       {/* route: the screen's answer */}
-      <div className="mt-[14px] grid gap-[14px] lg:grid-cols-12">
+      <div className="mt-[14px] grid grid-cols-1 gap-[14px] lg:grid-cols-12">
         <section className="relative h-[320px] overflow-hidden rounded-[20px] bg-surface sm:h-[420px] lg:col-span-8 lg:h-auto lg:min-h-[340px]" aria-labelledby="route-h">
           <h2 id="route-h" className="pointer-events-none absolute top-[22px] left-[22px] z-10 text-[16px] font-semibold">
             Route
@@ -125,7 +125,7 @@ export function PlanView({ plan, steps, notes, state }: Props) {
 
       {/* Two stacks rather than rows: panel heights vary with the data (rooms found, acts
           matched), and each stack's last panel grows so both columns end on one line. */}
-      <div className="mt-[14px] grid gap-[14px] lg:grid-cols-12">
+      <div className="mt-[14px] grid grid-cols-1 gap-[14px] lg:grid-cols-12">
         <div className="flex flex-col gap-[14px] lg:col-span-7">
           {selected && <StopDetail plan={plan} city={selected} run={run} refs={refs} />}
           <Pitches plan={plan} />
