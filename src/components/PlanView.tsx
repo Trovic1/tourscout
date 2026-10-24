@@ -36,9 +36,11 @@ export function PlanView({ plan, steps, notes, state }: Props) {
   const finding =
     top && home && home.affinity && top.affinity > home.affinity
       ? `Fans of ${refs} over-index more in ${top.name} (${score(top.affinity)}) than at home in ${home.name} (${score(home.affinity)}).`
-      : top
-        ? `Fans of ${refs} over-index most in ${top.name}, affinity ${score(top.affinity)} out of 100.`
-        : plan.summary;
+      : top && home && home.affinity
+        ? `Home is already the strongest market: fans of ${refs} over-index in ${home.name} (${score(home.affinity)}), then ${top.name} (${score(top.affinity)}).`
+        : top
+          ? `Fans of ${refs} over-index most in ${top.name}, affinity ${score(top.affinity)} out of 100.`
+          : plan.summary;
 
   return (
     <main className="mx-auto w-full max-w-[1208px] px-4 pt-8 pb-16 sm:px-6">
