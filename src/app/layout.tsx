@@ -1,29 +1,22 @@
 import type { Metadata } from "next";
-import { Archivo, Saira_Stencil } from "next/font/google";
+import { Inter, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
-const archivo = Archivo({
-  variable: "--font-archivo",
-  subsets: ["latin"],
-  axes: ["wdth"],
-});
+const inter = Inter({ variable: "--font-inter", subsets: ["latin"], weight: ["400", "500", "600"] });
 
-const stencil = Saira_Stencil({
-  variable: "--font-bss",
-  subsets: ["latin"],
-  axes: ["wdth"],
-});
+// A second face with one job: the greeting on the first screen.
+const serif = Source_Serif_4({ variable: "--font-serif-face", subsets: ["latin"], weight: ["600"] });
 
 export const metadata: Metadata = {
-  title: "TourScout — route your next tour on real fan taste",
+  title: "TourScout: plan a first tour from who you sound like",
   description:
-    "An AI touring agent built on Qloo's taste graph: find the cities that over-index on your act, map fan hotspots and venues, and route a dated tour with co-bills, sponsors and pitches.",
+    "For emerging artists Google hasn't heard of yet. Name the acts you sound like and where you're based; TourScout uses their fans in Qloo's taste graph to plan your first run: cities, small rooms, acts to open for, brands to pitch.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${archivo.variable} ${stencil.variable} h-full antialiased`}>
-      <body className="min-h-full">{children}</body>
+    <html lang="en" className={`${inter.variable} ${serif.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

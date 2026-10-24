@@ -48,6 +48,15 @@ export interface CityLead {
   venues?: Entity[];
   /** Agent-written reason this city belongs on the tour */
   why?: string;
+  /** Great-circle distance from the artist's home city */
+  kmFromHome?: number;
+  /** The artist's home city: always the opening show */
+  home?: boolean;
+}
+
+/** An act the same fans love. "support": a bigger act to open for; "peer": a similar-stage act to share bills with. */
+export interface BillMate extends Entity {
+  tier: "support" | "peer";
 }
 
 export interface AudienceProfile {
@@ -66,20 +75,22 @@ export interface TourStop {
 }
 
 export interface TourPlan {
-  mode: "act" | "venue";
-  act?: Entity;
-  /** venue mode: the market being programmed */
-  market?: CityLead;
+  /** The emerging artist's own name, if given */
+  artist?: string;
+  /** Acts the artist sounds like, whose fans drove every query */
+  refs: Entity[];
+  /** References the user picked that Qloo holds no fan data for */
+  dropped: Entity[];
+  home?: CityLead;
   headline: string;
   summary: string;
+  /** Every city ranked, home excluded */
   cities: CityLead[];
   route: TourStop[];
-  coHeadliners: Entity[];
-  /** venue mode: acts the market would buy tickets for */
-  lineup?: Entity[];
+  billMates: BillMate[];
   sponsors: SponsorLead[];
   audience?: AudienceProfile;
-  pitches: { booking: string; sponsor: string };
+  pitches: { venue: string; sponsor: string };
   dataSource: "qloo-live" | "qloo-mock";
   reasoning: "gemini" | "rules";
 }

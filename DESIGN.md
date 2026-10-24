@@ -1,57 +1,30 @@
-# Design: Road Case
+# Design
 
-TourScout looks like touring road cases: matte laminate panels with brushed-aluminium edging, stencilled case codes, and spike tape whose colour and form mark each stop's status. It is an Operate surface. The standard app shell (top bar, three-column board, tabbed detail section) comes first, and the world shows up only through type, palette, density and one signature move.
+TourScout's interface follows the taste skill's app-screen rules, style **True-black flat** (seed 1481519971, kind *creator*). Gigs happen at night and artists check this on their phones in short sessions, so the screen is dark, flat and quiet, and colour is kept for the data.
 
-## Tokens (src/app/globals.css `@theme`)
+## The move
 
-| Role | Token | Value |
-| --- | --- | --- |
-| Page / map ground | `case-950` | `#121212` (map field `#161616`) |
-| Panel laminate | `case-900` | `#1a1a1a` + 3px fibre dot texture (`.laminate`) |
-| Raised / selected row | `case-850` / `case-800` | `#1f1f1f` / `#242424` |
-| Hairline dividers | `case-700` | `#303234` |
-| Control borders | `case-600` | `#43474b` |
-| Aluminium text / edging | `alu-500/400/300` | `#8d9399` / `#a9afb5` / `#c4c9ce` |
-| Ink | `chalk` / `chalk-dim` | `#f2f0ea` / `#b8b5ad` |
+Elevation by lightness alone: ground `#000`, card `#111`, nested panel `#2a2a2a`. No borders or shadows on cards (the only shadow sits on the floating picker menu). The one primary control is inverted: a white 36px pill with black text. Secondary controls are outlined pills.
 
-Each spike-tape colour has exactly one job:
+## The face
 
-| Colour | Token | Job |
-| --- | --- | --- |
-| Yellow `#f2c230` | `tape-yellow` | Selection, the next/primary action, run capacity. Never data. |
-| Red `#ec5a43` | `tape-red` | Hold status, alerts, demo-data badge |
-| Blue `#4f86f0` | `tape-blue` | Every data series: affinity bars, heat glow, "Rising", live-data badge |
-| White `#f2f0ea` | `tape-white` | Anchor status (white gaff tape) |
-| Aluminium chevron | `alu-400` | Scout status |
-
-There is no green. Every date is a proposal, and nothing may read as "confirmed".
+- **One hue, stage-light amber `#f2b33d`**, the colour of tungsten bulbs in small rooms, in place of the dealt lime. It appears only on data: the route line, the selected stop and the affinity bar. Never on buttons, tabs or navigation. The logo mark is the only other place it appears.
+- **The signature element**: the route map and the run sheet, side by side. The run sheet is set like the dates on the back of a tour T-shirt.
+- **The intake as the first run**: the form sits where the plan will appear, with real example runs (and the reference artists' photos from Qloo) underneath.
 
 ## Type
 
-- **Saira Stencil**, width 75, weight 800 (`.stencil`, or `stencilDisplay` for mixed case). Used only for 3-letter city codes, the wordmark, the tour headline and "The run". The letter L must keep its foot.
-- **Archivo** (variable width): all UI and body text. Use `.tnum` for every number.
-- Scale: poster code `clamp(11rem,17vw,16rem)` (52vw on mobile), cropped by the panel's trailing edge only. Headline `clamp(1.6rem,2.6vw,2.4rem)`. Body 14–15px. Labels 11–12px uppercase, tracked 0.04–0.08em.
+Inter 400/500/600 for everything. Source Serif 4 600 has one job: the 48px greeting on the first screen (30px on phones). App sizes: title 24, section 16, figures 24, body 14, meta 12. Tabular figures on every number.
 
-## Status system
+## Screens
 
-`present.ts → stopStatus` splits the run's own affinity range into thirds: **Anchor** (white, solid), **Hold** (red, dashed), **Scout** (aluminium, chevron). Every place a status appears uses both the colour and the form: `.tape-solid`, `.tape-dashed`, `.tape-chevron`, the map leg strokes and the chip sills.
-
-## Affinity
-
-One 0–100 scale everywhere (`pct`, `score`). Never show decimals. Bars are 8px tall on a `case-700` track.
-
-## Components
-
-- **Aluminium edging** (`.alu-t/.alu-b/.alu-l/.alu-r`): a 2px brushed gradient, the divider between case panels.
-- **Plate** (`.plate`): a raised label plate for the city record and the mobile stop strip.
-- **Map chip**: 74×24 plate with the stencil code, a 10.5px stop number and a 4px status sill. A leader line runs to a square node. Labels are placed on rings around their stop to avoid collisions.
-- **Run row**: date block (day / DD / month), stencil code, city, 0–100 score, venue + km in, full-width status tape.
+- **Intake.** Question: "What do I need to give you?" Artist name (optional), home city, up to three sound-alike acts. Each pick is checked against Qloo and shown struck through if it holds no fan data.
+- **Plan.** Question: "Where should this artist play first, and in what order?" Answered by the biggest block (map + run sheet). The line under the title states the one finding (where these fans over-index most against home). Below: two stacks that end level, with the selected stop, emails, audience and all ranked cities on the left, and who to play with, brands, and how the plan was made on the right.
 
 ## Motion
 
-There is one authored sequence. Map legs lay down as spike tape in route order (`tape-lay`, 620ms expo-out, staggered 180ms) while stop chips stamp in (`stamp`, 420ms). The trace stamps each Qloo call as it lands. Elements are visible by default and animate from hidden, and reduced motion collapses everything to 1ms.
+Feedback only: press, hover, focus. The route legs draw in order when a plan lands; they are visible by default and only animate once the browser is painting frames, so a background tab or screenshot never shows an empty route. Reduced motion turns it off.
 
-## Layout
+## Checks
 
-- Desktop: header plus a three-column board fill `100dvh` (lead panel 300–368px · map · run list 320–384px), with the detail tabs below.
-- Mobile: a non-sticky header, then a strip of stop plates, then the lead panel, map and run list.
+`lint.mjs --app` and `inspect.mjs --app` from the taste skill pass with 0 FAIL on both screens at 1440, 768 and 390. One defended warning: the intake's 48px serif greeting, which the sheet's home pattern specifies.

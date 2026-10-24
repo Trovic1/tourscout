@@ -1,36 +1,40 @@
 # TourScout
 
-**An AI touring agent that routes a tour on real fan taste.**
+**Plan a first tour from who you sound like.**
 
-Give TourScout any touring act (a musician, a comedian, a podcast) and its agent uses [Qloo](https://qloo.com)'s taste graph to:
+Big acts know where to tour two years out. The artist who can't plan is the one Google hasn't heard of yet: no streaming history, no data, no booking agent. TourScout is for them.
 
-1. **Rank the world's cities** by how strongly local cultural taste overlaps with the act's audience, including markets the act has never played.
-2. **Map fan hotspots** inside the strongest cities with Qloo's geospatial heatmaps, and find the **best-matched live-music venues**.
-3. **Route and date the run** with a nearest-neighbour route that starts in the strongest market, then tag each stop as *Anchor*, *Hold* or *Scout*.
-4. Surface **taste-matched co-headliners** (including rising, affordable support acts), **sponsor brands** with the highest audience overlap, and the audience's **age and gender skew**.
-5. Draft **ready-to-send pitch emails** for promoters and the top sponsor.
+The artist names up to three acts they sound like and the city they're based in. TourScout's agent treats **the fans of those acts as the artist's future fans** and uses [Qloo](https://qloo.com)'s taste graph to plan a first run:
 
-**Market mode** works the other way round, for promoters and venue buyers: enter a city and get the acts its audience over-indexes on, with under-the-radar names flagged.
+1. **Cities, ranked** by how strongly local taste overlaps with those fans, each with its distance from home, so the first run stays affordable: opening night at home, mostly within a drive or a short flight, at most one long-haul market.
+2. **Rooms that fit**: the music venues in each city whose crowd matches those fans, plus where in the city the fans cluster.
+3. **A route with dates**, ordered to cut travel and held about 12 weeks out so rooms can still be booked.
+4. **Who to play with**: bigger acts with the same fans to ask for a support slot, and acts at a similar stage to share bills with.
+5. **Brands to pitch** that those fans already buy, with a small, realistic ask for each.
+6. **Emails ready to send** to a venue booker and a brand, written from the data and never inflated.
+
+Qloo lists many acts it holds no fan data for. TourScout checks every reference act up front, tells the artist which ones can't be used, and plans only from those that carry a real signal.
 
 ## Why it needs Qloo
 
-An LLM on its own can only guess that an Afrobeats star should play London. TourScout's agent **never invents a city, venue, act or brand**: every entity in the plan comes from a Qloo tool call, and Gemini only orchestrates those calls and writes the narrative. Remove Qloo and nothing is left to plan with.
+An LLM on its own can only guess where an unknown Lagos singer should play. TourScout's agent **never invents a city, venue, act or brand**: every entity in the plan comes from a Qloo call, and Gemini only orchestrates those calls and writes the words. Remove Qloo and nothing is left to plan with.
 
-| Agent tool | Qloo call |
+| Agent step | Qloo call |
 | --- | --- |
-| `find_act` | `/search` over artists, people and podcasts |
-| `rank_cities` | `/v2/insights` with `filter.type=urn:entity:destination` and the act as the signal |
-| `scan_city` | `/v2/insights` with `urn:heatmap` + place insights filtered to music venues in that city |
-| `find_co_headliners` | artist / person insights with the act as the signal (`filter.popularity.max` for rising acts) |
-| `find_sponsors` | brand insights with the act as the signal |
-| `audience_profile` | `urn:demographics` insights |
-| `find_market` / `market_lineup` | locality search, then artist insights with the city as the signal |
+| `check_references` | `/v2/insights` per reference act, to confirm it carries fan data |
+| `locate_home` | `/search` over localities |
+| `rank_cities` | `/v2/insights`, `filter.type=urn:entity:destination`, the reference acts as the signal, a popularity floor so villages and resorts drop out |
+| `scan_city` | `urn:heatmap` and music-venue place insights around the city's coordinates |
+| `find_bill_mates` | artist insights with the references as the signal, split by reach into acts to open for and peers |
+| `find_sponsors` | brand insights with the references as the signal |
+| `audience_profile` | `urn:demographics` per reference act, averaged |
 
 ## How it works
 
-- **Next.js 16** (App Router) and **Tailwind v4**. The UI streams the agent's progress as NDJSON, so you watch every Qloo call land.
-- **Gemini** (`gemini-2.5-flash`, free tier) runs a function-calling loop over the Qloo tools and finishes with `finalize_plan`. If Gemini is unavailable or rate-limited, a **rule-based planner** completes the same run on the same Qloo data, so the demo never dead-ends.
-- Qloo responses are cached briefly on the server (allowed by the hackathon terms) and are never committed to this repo.
+- **Next.js 16** (App Router) and **Tailwind v4**. The page streams the agent's progress as NDJSON, so you watch every Qloo call land.
+- **Gemini** (`gemini-flash-latest`) runs a function-calling loop over the Qloo tools and finishes with `finalize_plan`. When Gemini is busy it retries and falls back across Flash models; if all are unavailable, a **rule-based planner** completes the same run on the same Qloo data.
+- Qloo responses are cached briefly on the server (allowed by the hackathon terms) and never committed to this repo.
+- Example runs open directly: `/?example=lagos`, `london`, `atlanta`, `nairobi`, `accra`.
 
 ## Run it locally
 
@@ -40,8 +44,8 @@ cp .env.example .env.local   # add QLOO_API_KEY and GEMINI_API_KEY
 npm run dev
 ```
 
-With no keys, the app runs on built-in demo data shaped like Qloo's responses and labels itself **Demo data**.
+With no keys, the app runs on built-in demo data shaped like Qloo's responses and says so in the footer.
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Demo presets name real artists only as examples; no affiliation is implied.
+MIT, see [LICENSE](LICENSE). Example runs name real artists only as reference points for an unnamed artist's sound; no affiliation is implied.

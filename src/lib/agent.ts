@@ -1,16 +1,22 @@
 import { GoogleGenAI, type Content, type FunctionDeclaration } from "@google/genai";
 import { Toolkit, orderRoute, scheduleRoute } from "./tools";
-import type { AgentEvent, CityLead, TourPlan } from "./types";
+import type { AgentEvent, CityLead, Entity, TourPlan } from "./types";
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-latest";
 const MAX_TURNS = 10;
+/** A first run: home plus this many shows. */
+const SHOWS = 6;
 
 type Emit = (e: AgentEvent) => void;
 
 export interface PlanRequest {
-  mode: "act" | "venue";
-  query: string;
-  /** optional free-text goal, e.g. "first UK + Europe run, 10 dates" */
+  /** The emerging artist's own name; optional, and usually unknown to Qloo */
+  artist?: string;
+  /** Where the artist is based: the opening show */
+  home: string;
+  /** Acts the artist sounds like, already resolved to Qloo ids by the picker */
+  refs: { id: string; name: string }[];
+  /** optional free-text goal, e.g. "West Africa only, small rooms" */
   brief?: string;
 }
 
@@ -19,75 +25,86 @@ interface Narrative {
   summary: string;
   city_notes: { city: string; why: string }[];
   route_cities: string[];
-  booking_pitch: string;
+  venue_pitch: string;
   sponsor_pitch: string;
   sponsor_angles: { brand: string; angle: string }[];
 }
 
 const obj = (properties: Record<string, unknown>, required: string[] = []) => ({ type: "object", properties, required });
 
-const ACT_TOOLS: FunctionDeclaration[] = [
-  { name: "find_act", description: "Resolve an artist, comedian or podcast to a Qloo entity. Always call first.", parametersJsonSchema: obj({ name: { type: "string" } }, ["name"]) },
-  { name: "rank_cities", description: "Rank cities worldwide (or within one country) by how strongly their residents' cultural taste overlaps with the act's audience. Returns affinity 0-100. Worldwide results are limited to sizeable markets; call again with countryCode (e.g. GB, US, FR) to add key touring countries.", parametersJsonSchema: obj({ take: { type: "integer", description: "max 30" }, countryCode: { type: "string", description: "ISO-2 country code to rank cities inside one country" }, minPopularity: { type: "number", description: "0-1 floor on city size, default 0.6" } }) },
-  { name: "scan_city", description: "For one city from rank_cities: geospatial heatmap of where the act's fans cluster, plus the best-matched live music venues.", parametersJsonSchema: obj({ city: { type: "string" } }, ["city"]) },
-  { name: "find_co_headliners", description: "Acts whose fans share this act's taste. rising=true limits to less-famous acts (good openers / affordable support).", parametersJsonSchema: obj({ take: { type: "integer" }, rising: { type: "boolean" } }) },
-  { name: "find_sponsors", description: "Brands with the highest audience-taste overlap with the act.", parametersJsonSchema: obj({ take: { type: "integer" } }) },
-  { name: "audience_profile", description: "Age and gender affinity of the act's audience.", parametersJsonSchema: obj({}) },
-];
-
-const VENUE_TOOLS: FunctionDeclaration[] = [
-  { name: "find_market", description: "Resolve a city to a Qloo locality. Always call first.", parametersJsonSchema: obj({ city: { type: "string" } }, ["city"]) },
-  { name: "market_lineup", description: "Acts that this city's audience over-indexes on. rising=true limits to less-famous acts (cheaper to book, higher upside).", parametersJsonSchema: obj({ take: { type: "integer" }, rising: { type: "boolean" } }) },
-  { name: "scan_market", description: "Live music venues in the market best matched to its taste.", parametersJsonSchema: obj({}) },
-  { name: "find_sponsors", description: "Brands with the highest taste overlap with this market.", parametersJsonSchema: obj({ take: { type: "integer" } }) },
+const TOOLS: FunctionDeclaration[] = [
+  {
+    name: "rank_cities",
+    description:
+      "Rank cities by how strongly their residents' taste overlaps with fans of the reference acts. Returns affinity 0-100 and kmFromHome. Worldwide results are limited to sizeable markets; pass countryCode to rank cities inside one country (do this for the home country).",
+    parametersJsonSchema: obj({
+      take: { type: "integer", description: "max 30" },
+      countryCode: { type: "string", description: "ISO-2 country code" },
+      minPopularity: { type: "number", description: "0-1 floor on city size, default 0.6" },
+    }),
+  },
+  {
+    name: "scan_city",
+    description: "For one city: where the fans cluster (heatmap) and the music venues best matched to them.",
+    parametersJsonSchema: obj({ city: { type: "string" } }, ["city"]),
+  },
+  {
+    name: "find_bill_mates",
+    description:
+      'Acts the same fans already love. tier "support" = bigger acts the artist could open for; tier "peer" = acts at a similar stage to share bills or swap support slots with.',
+    parametersJsonSchema: obj({ tier: { type: "string", enum: ["support", "peer"] }, take: { type: "integer" } }),
+  },
+  { name: "find_sponsors", description: "Brands with the strongest taste overlap with these fans.", parametersJsonSchema: obj({ take: { type: "integer" } }) },
+  { name: "audience_profile", description: "Age and gender lean of the reference acts' audience.", parametersJsonSchema: obj({}) },
 ];
 
 const FINALIZE: FunctionDeclaration = {
   name: "finalize_plan",
-  description: "Call exactly once, after gathering data, to deliver the plan. Only reference cities, venues, acts and brands returned by the tools.",
+  description: "Call exactly once, after gathering data. Only reference cities, venues, acts and brands returned by the tools.",
   parametersJsonSchema: obj(
     {
-      headline: { type: "string", description: "Punchy tour/season name, max 6 words" },
-      summary: { type: "string", description: "2-3 sentences: the strategy and the single most surprising data-backed insight" },
-      city_notes: { type: "array", items: obj({ city: { type: "string" }, why: { type: "string", description: "One sentence, cite the affinity or hotspot data" } }, ["city", "why"]) },
-      route_cities: { type: "array", items: { type: "string" }, description: "Act mode: 6-10 cities to play, chosen from rank_cities. Venue mode: empty." },
-      booking_pitch: { type: "string", description: "Short email to a promoter/booker (act mode) or to an act's agent (venue mode), grounded in the data" },
-      sponsor_pitch: { type: "string", description: "Short email to the top sponsor, grounded in audience overlap" },
-      sponsor_angles: { type: "array", items: obj({ brand: { type: "string" }, angle: { type: "string", description: "One-line activation idea" } }, ["brand", "angle"]) },
+      headline: { type: "string", description: "Name for this first run, max 6 words, no hype words" },
+      summary: { type: "string", description: "2-3 plain sentences: the route's logic and the single most useful data-backed insight" },
+      city_notes: {
+        type: "array",
+        items: obj({ city: { type: "string" }, why: { type: "string", description: "One sentence on why this stop, adding what the numbers alone don't show" } }, ["city", "why"]),
+      },
+      route_cities: { type: "array", items: { type: "string" }, description: `${SHOWS - 2}-${SHOWS} cities from rank_cities, NOT including the home city (it is added as opening night)` },
+      venue_pitch: { type: "string", description: "Short, honest email from the artist's team to a small-room booker. Say that fans of the reference acts over-index in their city (Qloo taste data). The artist has no stats yet: never claim streams, listeners, sales or press, for the artist or anyone." },
+      sponsor_pitch: { type: "string", description: "Short email to the best-fit local brand, grounded in audience overlap. Ask for something small and real (drinks, travel, merch)." },
+      sponsor_angles: { type: "array", items: obj({ brand: { type: "string" }, angle: { type: "string", description: "One-line activation an unknown act could actually get" } }, ["brand", "angle"]) },
     },
-    ["headline", "summary", "city_notes", "route_cities", "booking_pitch", "sponsor_pitch", "sponsor_angles"],
+    ["headline", "summary", "city_notes", "route_cities", "venue_pitch", "sponsor_pitch", "sponsor_angles"],
   ),
 };
 
-function systemPrompt(req: PlanRequest) {
+function systemPrompt(req: PlanRequest, kit: Toolkit) {
+  const s = kit.state;
   const today = new Date().toISOString().slice(0, 10);
-  const common = `You are TourScout, a touring strategist for the live-entertainment industry. Today is ${today}.
-You have no opinions about where people live or what they like: every claim must come from the Qloo taste-graph tools.
-Work efficiently: call independent tools in parallel when possible. Never invent cities, venues, acts or brands.
-Affinity and popularity are 0-100 scores; always quote them that way (e.g. "affinity 94"), never as decimals.
-City notes must add information the numbers do not already show (rank, neighbourhood clusters, routing logic, opportunity), not restate the score.
-Finish by calling finalize_plan exactly once.`;
-  if (req.mode === "act")
-    return `${common}
-Goal: build a data-backed tour for the act "${req.query}".${req.brief ? ` The user's brief: "${req.brief}".` : ""}
-Strategy: find_act -> rank_cities (take 20) and audience_profile and find_co_headliners and find_sponsors -> scan_city for the 4-6 most promising cities (favour high affinity, and flag markets the act may be under-playing) -> finalize_plan.`;
-  return `${common}
-Goal: program the live-music calendar for the market "${req.query}" — tell a promoter which acts its audience would buy tickets for.${req.brief ? ` The user's brief: "${req.brief}".` : ""}
-Strategy: find_market -> market_lineup (take 12) and market_lineup (rising=true) -> scan_market and find_sponsors -> finalize_plan.`;
+  const refs = s.refs.map((r) => r.name).join(", ");
+  const home = s.home ? `${s.home.name}${s.home.country ? `, ${s.home.country}` : ""} (country code ${s.home.countryCode ?? "unknown"})` : req.home;
+  return `You are TourScout. You plan a FIRST tour for an emerging artist the world doesn't know yet. Today is ${today}.
+The artist${s.artist ? `, ${s.artist},` : ""} is based in ${home}. They sound like ${refs}. The artist is not in any database: the fans of ${refs} stand in for their future fans, and every query uses them as the signal.${s.dropped.length ? ` (${s.dropped.map((d) => d.name).join(", ")} had no fan data and was left out.)` : ""}${req.brief ? `\nThe artist's brief: "${req.brief}".` : ""}
+
+Rules:
+- Every claim comes from the tools. Never invent cities, venues, acts, brands or numbers.
+- This is a first run on a small budget: ${SHOWS - 1}-${SHOWS} shows plus opening night at home. Favour cities reachable by road or a short flight (see kmFromHome). Include a long-haul city only if its affinity is clearly exceptional, and at most one.
+- Small rooms, not arenas. Bigger acts are people to open for, not peers.
+- Affinity and reach are 0-100; quote them that way ("affinity 94"), never as decimals.
+- Write like a booking agent talking to a friend: plain, specific, no hype.
+- Call independent tools in parallel.
+
+Strategy: rank_cities (take 20) and rank_cities for the home country (take 10) and audience_profile and find_bill_mates (support) and find_bill_mates (peer) and find_sponsors -> scan_city for the home city and the 4-5 strongest reachable cities -> finalize_plan.`;
 }
 
 async function dispatch(kit: Toolkit, name: string, args: Record<string, unknown>) {
   const a = args as never;
   switch (name) {
-    case "find_act": return kit.findAct(a);
     case "rank_cities": return kit.rankCities(a);
     case "scan_city": return kit.scanCity(a);
-    case "find_co_headliners": return kit.findCoHeadliners(a);
+    case "find_bill_mates": return kit.findBillMates(a);
     case "find_sponsors": return kit.findSponsors(a);
     case "audience_profile": return kit.audienceProfile();
-    case "find_market": return kit.findMarket(a);
-    case "market_lineup": return kit.marketLineup(a);
-    case "scan_market": return kit.scanMarket();
     default: throw new Error(`Unknown tool ${name}`);
   }
 }
@@ -117,14 +134,11 @@ async function geminiAgent(req: PlanRequest, kit: Toolkit, emit: Emit): Promise<
   if (!key) return null;
   // A hung connection should fall back to the rule-based planner fast, not stall the run.
   const ai = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 25000 } });
-  const tools = [{ functionDeclarations: [...(req.mode === "act" ? ACT_TOOLS : VENUE_TOOLS), FINALIZE] }];
-  const contents: Content[] = [{ role: "user", parts: [{ text: req.mode === "act" ? `Plan a tour for ${req.query}.` : `Program the calendar for ${req.query}.` }] }];
+  const tools = [{ functionDeclarations: [...TOOLS, FINALIZE] }];
+  const contents: Content[] = [{ role: "user", parts: [{ text: "Plan the first tour." }] }];
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const res = await generate(ai, {
-      contents,
-      config: { systemInstruction: systemPrompt(req), tools, temperature: 0.4 },
-    });
+    const res = await generate(ai, { contents, config: { systemInstruction: systemPrompt(req, kit), tools, temperature: 0.4 } });
     const parts = res.candidates?.[0]?.content?.parts ?? [];
     contents.push({ role: "model", parts });
     const text = parts.map((p) => p.text).filter(Boolean).join(" ").trim();
@@ -156,100 +170,110 @@ async function geminiAgent(req: PlanRequest, kit: Toolkit, emit: Emit): Promise<
 /* ---------- deterministic fallback: same tools, template narrative ---------- */
 
 const ORD = ["1st", "2nd", "3rd"];
-function whyCity(c: CityLead, i: number, n: number, act: string) {
-  const rank = ORD[i] ?? `${i + 1}th`;
+const ordinal = (i: number) => ORD[i] ?? `${i + 1}th`;
+
+function whyCity(c: CityLead, i: number, n: number, refs: string) {
+  const parts = [`Ranks ${ordinal(i)} of ${n} cities for fans of ${refs}.`];
   const hot = c.hotspots?.filter((h) => h.affinity > 0.8).length ?? 0;
-  const parts = [`Ranks ${rank} of ${n} markets for ${act}'s audience.`];
-  if (hot) parts.push(`Fans cluster in ${hot} high-affinity districts, so one well-placed room can carry the night.`);
-  else if (i >= 3) parts.push("Under-served relative to its taste match: a strong test market.");
+  if (hot) parts.push(`They cluster in ${hot} districts, so one well-placed room can carry the night.`);
+  if (c.kmFromHome !== undefined && c.kmFromHome < 1200) parts.push(`${c.kmFromHome.toLocaleString("en-GB")} km from home: drivable or a short flight.`);
   return parts.join(" ");
 }
 
-async function rulesAgent(req: PlanRequest, kit: Toolkit): Promise<Narrative> {
+/** A first tour weighs taste against travel cost: long-haul cities need a much stronger match. */
+const reachScore = (c: CityLead) => c.affinity - Math.min(c.kmFromHome ?? 0, 9000) / 30000;
+const LONG_HAUL_KM = 5000;
+
+/** The best-scoring stops, with at most one long-haul city. */
+function pickStops(cities: CityLead[], n: number) {
+  const out: CityLead[] = [];
+  for (const c of [...cities].sort((a, b) => reachScore(b) - reachScore(a))) {
+    if ((c.kmFromHome ?? 0) > LONG_HAUL_KM && out.some((o) => (o.kmFromHome ?? 0) > LONG_HAUL_KM)) continue;
+    out.push(c);
+    if (out.length === n) break;
+  }
+  return out;
+}
+
+async function rulesAgent(kit: Toolkit): Promise<Narrative> {
   const s = kit.state;
-  if (req.mode === "act") {
-    if (!s.act) await kit.findAct({ name: req.query });
-    await Promise.all([
-      s.cities.length ? null : kit.rankCities({ take: 20 }),
-      s.audience ? null : kit.audienceProfile().catch(() => null),
-      s.coHeadliners.length ? null : kit.findCoHeadliners({ take: 8 }).catch(() => null),
-      s.sponsors.length ? null : kit.findSponsors({ take: 8 }).catch(() => null),
-    ]);
-    const pick = s.cities.slice(0, 8);
-    for (const c of pick.slice(0, 5)) if (!c.venues) await kit.scanCity({ city: c.name }).catch(() => null);
-    const act = s.act!;
-    const top = pick[0];
-    const surprise = pick.find((c, i) => i > 2 && c.countryCode && c.countryCode !== top?.countryCode) ?? pick[3];
-    return {
-      headline: `${act.name}: The Affinity Tour`,
-      summary: `${act.name}'s audience over-indexes most in ${top?.name} (affinity ${Math.round((top?.affinity ?? 0) * 100)}). ${surprise ? `${surprise.name} ranks higher than its market size suggests, which makes it a strong opportunity.` : ""}`,
-      city_notes: pick.map((c, i) => ({ city: c.name, why: whyCity(c, i, s.cities.length, act.name) })),
-      route_cities: pick.map((c) => c.name),
-      booking_pitch: `Hi — we're routing ${act.name} and Qloo's taste data puts your market in our top ${pick.length} worldwide by audience affinity. We'd love to hold a date. Can we talk avails?`,
-      sponsor_pitch: `Hi — ${act.name}'s audience shows one of the strongest taste overlaps we measured with ${s.sponsors[0]?.name ?? "your brand"}. We'd like to explore a tour partnership across ${pick.slice(0, 4).map((c) => c.name).join(", ")}.`,
-      sponsor_angles: s.sponsors.slice(0, 4).map((b) => ({ brand: b.name, angle: `Co-branded fan experience at each stop` })),
-    };
-  }
-  if (!s.market) await kit.findMarket({ city: req.query });
-  if (!s.lineup.length) {
-    await kit.marketLineup({ take: 12 });
-    await kit.marketLineup({ take: 8, rising: true }).catch(() => null);
-  }
-  if (!s.market!.venues) await kit.scanMarket().catch(() => null);
-  if (!s.sponsors.length) await kit.findSponsors({ take: 6 }).catch(() => null);
-  const m = s.market!;
+  await Promise.all([
+    s.cities.length ? null : kit.rankCities({ take: 20 }).catch(() => null),
+    s.home?.countryCode && !s.cities.some((c) => c.countryCode === s.home?.countryCode)
+      ? kit.rankCities({ take: 10, countryCode: s.home.countryCode }).catch(() => null)
+      : null,
+    s.audience ? null : kit.audienceProfile().catch(() => null),
+    s.billMates.some((b) => b.tier === "support") ? null : kit.findBillMates({ tier: "support", take: 6 }).catch(() => null),
+    s.billMates.some((b) => b.tier === "peer") ? null : kit.findBillMates({ tier: "peer", take: 8 }).catch(() => null),
+    s.sponsors.length ? null : kit.findSponsors({ take: 8 }).catch(() => null),
+  ]);
+  const pick = pickStops(s.cities, SHOWS - 1);
+  if (s.home && !s.home.venues) await kit.scanCity({ city: s.home.name }).catch(() => null);
+  for (const c of pick.slice(0, 4)) if (!c.venues) await kit.scanCity({ city: c.name }).catch(() => null);
+
+  const refs = s.refs.map((r) => r.name).join(" + ");
+  const who = kit.who;
+  const top = [...pick].sort((a, b) => b.affinity - a.affinity)[0];
+  const support = s.billMates.find((b) => b.tier === "support");
+  const brand = s.sponsors[0];
   return {
-    headline: `${m.name}: Next Season`,
-    summary: `${m.name}'s audience over-indexes on ${s.lineup.slice(0, 3).map((a) => a.name).join(", ")}. The lower-popularity names on this list are where the margin is.`,
-    city_notes: [],
-    route_cities: [],
-    booking_pitch: `Hi — Qloo's taste data shows ${m.name} over-indexes on your artist's audience. We'd like to discuss a headline date.`,
-    sponsor_pitch: `Hi — your brand's audience overlaps strongly with ${m.name}'s live-music crowd. Let's talk season sponsorship.`,
-    sponsor_angles: s.sponsors.slice(0, 4).map((b) => ({ brand: b.name, angle: "Season presenting partner" })),
+    headline: s.home ? `${who === "this artist" ? "First run" : who}: ${s.home.name} and out` : `${who}: first run`,
+    summary: `Fans of ${refs} over-index most in ${top?.name ?? "these cities"} (affinity ${Math.round((top?.affinity ?? 0) * 100)}). The route opens at home and stays mostly within reach, so the first run can pay for itself.${support ? ` ${support.name}'s audience overlaps closely: their tour is the one to ask for a support slot on.` : ""}`,
+    city_notes: pick.map((c) => ({ city: c.name, why: whyCity(c, s.cities.indexOf(c), s.cities.length, refs) })),
+    route_cities: pick.map((c) => c.name),
+    venue_pitch: `Hi, I'm booking a first run for ${who === "this artist" ? "an artist I manage" : who}, whose sound sits close to ${refs}. Qloo's taste data shows fans of those acts over-index in your city, and your room matches them better than most. We're looking at a weeknight in the window below and can bring a local support act. Could we talk about a date?`,
+    sponsor_pitch: `Hi, ${brand?.name ?? "your brand"}'s customers and fans of ${refs} overlap more than almost any other brand we checked. ${who === "this artist" ? "We're" : `${who} is`} playing a first run of small rooms${s.home ? ` starting in ${s.home.name}` : ""}. Would you support it with product for the shows in return for presence at the merch table and on our posts?`,
+    sponsor_angles: s.sponsors.slice(0, 4).map((b) => ({ brand: b.name, angle: "Product at the shows in exchange for merch-table presence" })),
   };
 }
 
-function assemble(req: PlanRequest, kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]): TourPlan {
+function assemble(kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]): TourPlan {
   const s = kit.state;
+  const refs = s.refs.map((r) => r.name).join(" + ");
   const notes = new Map(n.city_notes?.map((c) => [c.city.toLowerCase(), c.why]) ?? []);
   // The model notes only some cities; the rest get the rule-based note so no stop is left blank.
   s.cities.forEach((c, i) => {
-    c.why = notes.get(c.name.toLowerCase()) ?? c.why ?? (s.act ? whyCity(c, i, s.cities.length, s.act.name) : undefined);
+    c.why = notes.get(c.name.toLowerCase()) ?? c.why ?? whyCity(c, i, s.cities.length, refs);
   });
+  if (s.home) s.home.why = notes.get(s.home.name.toLowerCase()) ?? "Opening night at home, where the first fans already are.";
 
-  let routeCities: CityLead[] = [];
-  if (req.mode === "act") {
-    const wanted = (n.route_cities ?? []).map((x) => x.toLowerCase());
-    routeCities = s.cities.filter((c) => wanted.includes(c.name.toLowerCase()));
-    if (routeCities.length < 4) routeCities = s.cities.slice(0, 8);
-    routeCities = orderRoute(routeCities);
-  }
+  const homeName = s.home?.name.toLowerCase();
+  const wanted = (n.route_cities ?? []).map((x) => x.toLowerCase()).filter((x) => x !== homeName);
+  let stops = s.cities.filter((c) => wanted.includes(c.name.toLowerCase()));
+  if (stops.length < 3) stops = pickStops(s.cities, SHOWS - 1);
+  const routeCities = orderRoute(s.home ? [s.home, ...stops] : stops);
   const angles = new Map(n.sponsor_angles?.map((x) => [x.brand.toLowerCase(), x.angle]) ?? []);
 
   return {
-    mode: req.mode,
-    act: s.act,
-    market: s.market,
+    artist: s.artist,
+    refs: s.refs,
+    dropped: s.dropped,
+    home: s.home,
     headline: n.headline,
     summary: n.summary,
     cities: s.cities,
     route: scheduleRoute(routeCities),
-    coHeadliners: s.coHeadliners,
-    lineup: s.lineup,
+    billMates: s.billMates,
     sponsors: s.sponsors.map((b) => ({ ...b, angle: angles.get(b.name.toLowerCase()) })),
     audience: s.audience,
-    pitches: { booking: n.booking_pitch, sponsor: n.sponsor_pitch },
+    pitches: { venue: n.venue_pitch, sponsor: n.sponsor_pitch },
     dataSource: kit.q.live ? "qloo-live" : "qloo-mock",
     reasoning,
   };
 }
 
 export async function planTour(req: PlanRequest, emit: Emit) {
-  const kit = new Toolkit(emit, req.mode);
+  const refs: Entity[] = req.refs.map((r) => ({ id: r.id, name: r.name, kind: "artist" }));
+  const kit = new Toolkit(emit, refs, req.artist?.trim() || undefined);
+  emit({ type: "status", message: "Agent started" });
+
+  // Setup: these must succeed (references) or are worth trying once (home) before any planning.
+  const [refsOk] = await Promise.allSettled([kit.checkReferences(), kit.locateHome(req.home)]);
+  if (refsOk.status === "rejected") throw refsOk.reason;
+
   let narrative: Narrative | null = null;
   let reasoning: TourPlan["reasoning"] = "gemini";
   try {
-    emit({ type: "status", message: "Agent started" });
     narrative = await geminiAgent(req, kit, emit);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -257,9 +281,10 @@ export async function planTour(req: PlanRequest, emit: Emit) {
   }
   if (!narrative) {
     reasoning = "rules";
-    narrative = await rulesAgent(req, kit);
+    narrative = await rulesAgent(kit);
   }
-  // Make sure the essentials exist even if the LLM skipped a tool.
-  if (req.mode === "act" && !kit.state.cities.length) await kit.rankCities({ take: 20 });
-  emit({ type: "plan", plan: assemble(req, kit, narrative, reasoning) });
+  // Make sure the essentials exist even if the model skipped a tool.
+  if (!kit.state.cities.length) await kit.rankCities({ take: 20 });
+  if (!kit.state.cities.length) throw new Error("Qloo returned no cities for these acts. Try adding a better-known reference act.");
+  emit({ type: "plan", plan: assemble(kit, narrative, reasoning) });
 }

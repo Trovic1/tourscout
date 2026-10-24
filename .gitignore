@@ -54,3 +54,6 @@ skills-lock.json
 # reference material (not ours to redistribute)
 qloo-docs/
 shots/
+
+# design tooling output
+.taste-skill/

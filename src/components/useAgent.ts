@@ -3,6 +3,12 @@
 import { useCallback, useRef, useState } from "react";
 import type { AgentEvent, TourPlan } from "@/lib/types";
 
+export interface PlanInput {
+  artist?: string;
+  home: string;
+  refs: { id: string; name: string }[];
+}
+
 export interface TraceStep {
   id: string;
   name: string;
@@ -22,7 +28,7 @@ export function useAgent() {
   const [error, setError] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
 
-  const run = useCallback(async (mode: "act" | "venue", query: string) => {
+  const run = useCallback(async (input: PlanInput) => {
     abort.current?.abort();
     const ctl = new AbortController();
     abort.current = ctl;
@@ -49,10 +55,13 @@ export function useAgent() {
       const res = await fetch("/api/plan", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode, query }),
+        body: JSON.stringify(input),
         signal: ctl.signal,
       });
-      if (!res.ok || !res.body) throw new Error(`The planner returned ${res.status}. Try again in a moment.`);
+      if (!res.ok || !res.body) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `The planner returned ${res.status}. Try again in a moment.`);
+      }
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf = "";
@@ -79,5 +88,14 @@ export function useAgent() {
     }
   }, []);
 
-  return { state, steps, notes, plan, error, run };
+  const reset = useCallback(() => {
+    abort.current?.abort();
+    setPlan(null);
+    setSteps([]);
+    setNotes([]);
+    setError(null);
+    setState("idle");
+  }, []);
+
+  return { state, steps, notes, plan, error, run, reset };
 }
