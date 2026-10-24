@@ -20,48 +20,32 @@ export function cityCode(name: string) {
   return CODES[k] ?? k.replace(/[^a-z]/g, "").slice(0, 3).toUpperCase();
 }
 
-export type StopStatus = "anchor" | "hold" | "scout";
-
-/** Anchor/hold/scout by thirds of the run's own affinity range. */
-export function stopStatus(c: CityLead, run: CityLead[]): StopStatus {
-  const vals = run.map((r) => r.affinity).sort((a, b) => b - a);
-  const hi = vals[Math.floor(vals.length / 3)] ?? 1;
-  const lo = vals[Math.floor((vals.length * 2) / 3)] ?? 0;
-  if (c.affinity >= hi) return "anchor";
-  if (c.affinity >= lo) return "hold";
-  return "scout";
-}
-
-export const STATUS_META: Record<StopStatus, { label: string; color: string; hex: string; form: string; note: string }> = {
-  anchor: { label: "Anchor", color: "var(--color-tape-white)", hex: "#f2f0ea", form: "tape-solid", note: "Strongest taste match in the run. Propose the headline date here." },
-  hold: { label: "Hold", color: "var(--color-tape-red)", hex: "#ec5a43", form: "tape-dashed", note: "Solid match. Ask the promoter for a hold." },
-  scout: { label: "Scout", color: "var(--color-alu-400)", hex: "#a9afb5", form: "tape-chevron", note: "Emerging market. Test it in a smaller room." },
-};
-
+/** Dates read in sentence case: "Thu", "21", "Jan". */
 export function fmtDate(iso: string) {
   const d = new Date(iso + "T00:00:00Z");
-  return {
-    dow: d.toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" }).toUpperCase(),
-    day: d.toLocaleDateString("en-GB", { day: "2-digit", timeZone: "UTC" }),
-    mon: d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" }).toUpperCase(),
-  };
+  const f = (o: Intl.DateTimeFormatOptions) => d.toLocaleDateString("en-GB", { ...o, timeZone: "UTC" });
+  return { dow: f({ weekday: "short" }), day: f({ day: "numeric" }), mon: f({ month: "short" }) };
 }
 
+/** Every stop of the run in order, home included. */
 export function runCities(plan: TourPlan): CityLead[] {
-  const byId = new Map(plan.cities.map((c) => [c.id, c]));
+  const byId = new Map([...plan.cities, ...(plan.home ? [plan.home] : [])].map((c) => [c.id, c]));
   return plan.route.map((s) => byId.get(s.cityId)).filter((c): c is CityLead => !!c);
 }
 
-export const pct = (v?: number) => (v === undefined ? "—" : `${Math.round(v * 100)}`);
+/** Affinity and reach are always shown on one 0-100 scale. */
+export const score = (v?: number) => (v === undefined ? undefined : Math.round(v * 100));
 
-/** Affinity is always shown on one 0-100 scale. */
-export const score = (v: number) => Math.round(v * 100);
+export const kmFmt = (n: number) => `${Math.round(n).toLocaleString("en-GB")} km`;
+
+export const refList = (names: string[]) =>
+  names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 
 export const AGE_LABELS: Record<string, string> = {
-  "24_and_younger": "≤24",
-  "25_to_29": "25–29",
-  "30_to_34": "30–34",
-  "35_to_44": "35–44",
-  "45_to_54": "45–54",
-  "55_and_older": "55+",
+  "24_and_younger": "24 and under",
+  "25_to_29": "25 to 29",
+  "30_to_34": "30 to 34",
+  "35_to_44": "35 to 44",
+  "45_to_54": "45 to 54",
+  "55_and_older": "55 and over",
 };

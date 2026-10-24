@@ -12,6 +12,8 @@ export interface QlooSource {
   heatmap(params: Params): Promise<Hotspot[]>;
   demographics(entityId: string): Promise<AudienceProfile | undefined>;
   tags(query: string, take?: number): Promise<{ id: string; name: string }[]>;
+  /** Whether Qloo holds fan-taste data for this entity (many listed acts have none). */
+  hasSignal(entityId: string): Promise<boolean>;
 }
 
 // Private server-side cache (allowed by Qloo's hackathon terms; never committed).
@@ -100,6 +102,7 @@ export function normalizeEntity(raw: Raw): Entity {
 }
 
 const liveQloo: QlooSource = {
+  hasSignal: async () => true,
   live: true,
   async search(query, types, take = 5) {
     const data = await get<{ results?: Raw[] }>("/search", {
@@ -149,6 +152,31 @@ const liveQloo: QlooSource = {
       name: String(t.name),
     }));
   },
+};
+
+const signalCache = new Map<string, boolean>();
+
+liveQloo.hasSignal = async (entityId) => {
+  const hit = signalCache.get(entityId);
+  if (hit !== undefined) return hit;
+  try {
+    const data = await get<{ results?: { entities?: Raw[] } }>("/v2/insights", {
+      "filter.type": "urn:entity:destination",
+      "signal.interests.entities": entityId,
+      take: 1,
+    });
+    const first = data.results?.entities?.[0] as Raw | undefined;
+    const ok = !!first && num(((first.query ?? {}) as Raw).affinity) !== undefined;
+    signalCache.set(entityId, ok);
+    return ok;
+  } catch (err) {
+    // Qloo answers 400 "all signals invalid" for an act it lists but has no data on.
+    if (err instanceof Error && / 400:/.test(err.message)) {
+      signalCache.set(entityId, false);
+      return false;
+    }
+    throw err;
+  }
 };
 
 export function qloo(): QlooSource {

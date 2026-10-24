@@ -150,7 +150,8 @@ function cityEntity(c: City, affinity: number): Entity {
 }
 
 function signalName(params: Params) {
-  const id = String(params["signal.interests.entities"] ?? "");
+  // Several references arrive comma-joined; the demo profiles follow the first.
+  const id = String(params["signal.interests.entities"] ?? "").split(",")[0];
   return byId.get(id) ?? id.replace(/^mock-/, "").replace(/-/g, " ");
 }
 
@@ -169,6 +170,10 @@ function cityFor(params: Record<string, unknown>) {
 
 export const mockQloo: QlooSource = {
   live: false,
+  async hasSignal() {
+    return true;
+  },
+
   async search(query, types) {
     await sleep(120);
     if (types.some((t) => t.includes("locality") || t.includes("destination"))) {

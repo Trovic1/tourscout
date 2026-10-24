@@ -7,14 +7,21 @@ export const maxDuration = 120;
 const recent = new Map<string, { at: number; events: AgentEvent[] }>();
 const KEEP = 1000 * 60 * 30;
 
+const clean = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
+
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as Partial<PlanRequest>;
-  const query = String(body.query ?? "").trim().slice(0, 80);
-  const mode = body.mode === "venue" ? "venue" : "act";
-  const brief = body.brief ? String(body.brief).slice(0, 300) : undefined;
-  if (!query) return Response.json({ error: "query required" }, { status: 400 });
+  const home = clean(body.home, 80);
+  const artist = clean(body.artist, 80) || undefined;
+  const brief = clean(body.brief, 300) || undefined;
+  const refs = (Array.isArray(body.refs) ? body.refs : [])
+    .map((r) => ({ id: clean(r?.id, 80), name: clean(r?.name, 80) }))
+    .filter((r) => r.id && r.name)
+    .slice(0, 3);
+  if (!home) return Response.json({ error: "Add the city the artist is based in." }, { status: 400 });
+  if (!refs.length) return Response.json({ error: "Add at least one act the artist sounds like." }, { status: 400 });
 
-  const key = `${mode}:${query.toLowerCase()}:${brief ?? ""}`;
+  const key = JSON.stringify([artist?.toLowerCase(), home.toLowerCase(), refs.map((r) => r.id).sort(), brief]);
   const enc = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -28,7 +35,7 @@ export async function POST(req: Request) {
       }
       const log: AgentEvent[] = [];
       try {
-        await planTour({ mode, query, brief }, (e) => {
+        await planTour({ artist, home, refs, brief }, (e) => {
           log.push(e);
           send(e);
         });
