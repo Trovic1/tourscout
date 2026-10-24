@@ -1,7 +1,8 @@
 import { planTour, type PlanRequest } from "@/lib/agent";
 import type { AgentEvent } from "@/lib/types";
 
-export const maxDuration = 120;
+// The agent budgets ~70s for Gemini and then finishes with rules; this leaves ample headroom.
+export const maxDuration = 180;
 
 // Finished runs are kept briefly so repeat demos don't burn the free Gemini quota.
 const recent = new Map<string, { at: number; events: AgentEvent[] }>();
