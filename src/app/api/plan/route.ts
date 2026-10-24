@@ -1,7 +1,7 @@
 import { planTour, type PlanRequest } from "@/lib/agent";
 import type { AgentEvent } from "@/lib/types";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 // Finished runs are kept briefly so repeat demos don't burn the free Gemini quota.
 const recent = new Map<string, { at: number; events: AgentEvent[] }>();

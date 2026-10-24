@@ -2,7 +2,7 @@ import { GoogleGenAI, type Content, type FunctionDeclaration } from "@google/gen
 import { Toolkit, orderRoute, scheduleRoute } from "./tools";
 import type { AgentEvent, CityLead, TourPlan } from "./types";
 
-const MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-latest";
 const MAX_TURNS = 10;
 
 type Emit = (e: AgentEvent) => void;
@@ -28,7 +28,7 @@ const obj = (properties: Record<string, unknown>, required: string[] = []) => ({
 
 const ACT_TOOLS: FunctionDeclaration[] = [
   { name: "find_act", description: "Resolve an artist, comedian or podcast to a Qloo entity. Always call first.", parametersJsonSchema: obj({ name: { type: "string" } }, ["name"]) },
-  { name: "rank_cities", description: "Rank cities worldwide (or within one country) by how strongly their residents' cultural taste overlaps with the act's audience. Returns affinity 0-1.", parametersJsonSchema: obj({ take: { type: "integer", description: "max 30" }, countryCode: { type: "string", description: "ISO-2 country code to rank cities inside one country" } }) },
+  { name: "rank_cities", description: "Rank cities worldwide (or within one country) by how strongly their residents' cultural taste overlaps with the act's audience. Returns affinity 0-100. Worldwide results are limited to sizeable markets; call again with countryCode (e.g. GB, US, FR) to add key touring countries.", parametersJsonSchema: obj({ take: { type: "integer", description: "max 30" }, countryCode: { type: "string", description: "ISO-2 country code to rank cities inside one country" }, minPopularity: { type: "number", description: "0-1 floor on city size, default 0.6" } }) },
   { name: "scan_city", description: "For one city from rank_cities: geospatial heatmap of where the act's fans cluster, plus the best-matched live music venues.", parametersJsonSchema: obj({ city: { type: "string" } }, ["city"]) },
   { name: "find_co_headliners", description: "Acts whose fans share this act's taste. rising=true limits to less-famous acts (good openers / affordable support).", parametersJsonSchema: obj({ take: { type: "integer" }, rising: { type: "boolean" } }) },
   { name: "find_sponsors", description: "Brands with the highest audience-taste overlap with the act.", parametersJsonSchema: obj({ take: { type: "integer" } }) },
@@ -95,7 +95,8 @@ async function dispatch(kit: Toolkit, name: string, args: Record<string, unknown
 async function geminiAgent(req: PlanRequest, kit: Toolkit, emit: Emit): Promise<Narrative | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
-  const ai = new GoogleGenAI({ apiKey: key });
+  // A hung connection should fall back to the rule-based planner fast, not stall the run.
+  const ai = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 25000 } });
   const tools = [{ functionDeclarations: [...(req.mode === "act" ? ACT_TOOLS : VENUE_TOOLS), FINALIZE] }];
   const contents: Content[] = [{ role: "user", parts: [{ text: req.mode === "act" ? `Plan a tour for ${req.query}.` : `Program the calendar for ${req.query}.` }] }];
 

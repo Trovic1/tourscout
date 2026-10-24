@@ -48,13 +48,27 @@ type Raw = Record<string, unknown>;
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
 const str = (v: unknown) => (typeof v === "string" && v.length ? v : undefined);
 
+const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+function countryName(code?: string) {
+  if (!code) return undefined;
+  try {
+    return regionNames.of(code.toUpperCase());
+  } catch {
+    return undefined;
+  }
+}
+
 export function normalizeEntity(raw: Raw): Entity {
   const p = (raw.properties ?? {}) as Raw;
   const geo = (p.geocode ?? {}) as Raw;
   const loc = (raw.location ?? p.location ?? {}) as Raw;
   const q = (raw.query ?? {}) as Raw;
   const img = (p.image ?? {}) as Raw;
-  const subtype = str(raw.subtype) ?? str(raw.type) ?? "";
+  const subtype = str(raw.subtype) ?? str(raw.type) ?? (Array.isArray(raw.types) ? str(raw.types[0]) : undefined) ?? "";
+  // Localities carry their country in an ancestors list, not a geocode block.
+  const ancestors = Array.isArray(p.ancestors) ? (p.ancestors as Raw[]) : [];
+  const ancCountry = ancestors.find((a) => a.place === "country");
+  const code = str(geo.country_code) ?? str(p.country_code);
   const tags = Array.isArray(raw.tags)
     ? (raw.tags as Raw[]).map((t) => str(t.name)).filter((t): t is string => !!t)
     : undefined;
@@ -71,8 +85,8 @@ export function normalizeEntity(raw: Raw): Entity {
     lat: num(loc.lat) ?? num(loc.latitude) ?? num(p.lat),
     lng: num(loc.lon) ?? num(loc.lng) ?? num(loc.longitude) ?? num(p.lon),
     city: str(geo.city) ?? str(geo.name) ?? str(p.city),
-    country: str(geo.country) ?? str(p.country),
-    countryCode: str(geo.country_code) ?? str(p.country_code),
+    country: str(geo.country) ?? str(p.country) ?? countryName(code) ?? str(ancCountry?.name),
+    countryCode: code,
     neighborhood: str(geo.neighborhood) ?? str(p.neighborhood),
     address: str(p.address),
   };
