@@ -32,7 +32,7 @@ An LLM on its own can only guess where an unknown Lagos singer should play. Tour
 ## How it works
 
 - **Next.js 16** (App Router) and **Tailwind v4**. The page streams the agent's progress as NDJSON, so you watch every Qloo call land.
-- **Gemini** (`gemini-flash-latest`) runs a function-calling loop over the Qloo tools and finishes with `finalize_plan`. When Gemini is busy it retries and falls back across Flash models; if all are unavailable, a **rule-based planner** completes the same run on the same Qloo data.
+- **Gemini** (`gemini-flash-lite-latest`, the fastest at tool calls) runs a function-calling loop over the Qloo tools and finishes with `finalize_plan`. When Gemini is busy it retries and falls back across Flash models; if all are unavailable, a **rule-based planner** completes the same run on the same Qloo data.
 - Qloo responses are cached briefly on the server (allowed by the hackathon terms) and never committed to this repo.
 - Example runs open directly: `/?example=lagos`, `london`, `atlanta`, `nairobi`, `accra`.
 

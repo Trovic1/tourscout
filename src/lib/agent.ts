@@ -1,8 +1,11 @@
 import { GoogleGenAI, type Content, type FunctionDeclaration } from "@google/genai";
 import { Toolkit, orderRoute, scheduleRoute } from "./tools";
+import { km } from "./geo";
 import type { AgentEvent, CityLead, Entity, TourPlan } from "./types";
 
-const MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-latest";
+// Flash-Lite answers tool calls in 1-3 s; the full Flash model was taking 20-40 s per turn on the
+// free tier, which pushed whole runs past their time budget.
+const MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-lite-latest";
 const MAX_TURNS = 10;
 /** Gemini gets this long in total; after that the rule-based planner finishes from the data
  * already gathered, so a slow model can never push a run past the server's time limit. */
@@ -113,7 +116,7 @@ async function dispatch(kit: Toolkit, name: string, args: Record<string, unknown
 }
 
 // Flash models hit "high demand" 503s at peak times; retry once, then try the next model.
-const MODELS = [...new Set([MODEL, "gemini-3-flash-preview", "gemini-flash-lite-latest"])];
+const MODELS = [...new Set([MODEL, "gemini-3-flash-preview", "gemini-flash-latest"])];
 const transient = (msg: string) => /\b(429|500|503|504)\b|high demand|overloaded|deadline|unavailable|fetch failed/i.test(msg);
 
 async function generate(ai: GoogleGenAI, req: Omit<Parameters<GoogleGenAI["models"]["generateContent"]>[0], "model">, deadline: number) {
@@ -125,7 +128,10 @@ async function generate(ai: GoogleGenAI, req: Omit<Parameters<GoogleGenAI["model
         return await ai.models.generateContent({ ...req, model });
       } catch (err) {
         last = err;
-        if (!transient(err instanceof Error ? err.message : String(err))) throw err;
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!transient(msg)) throw err;
+        // A rate limit will not clear in a second; move straight to the next model.
+        if (/429|quota|rate/i.test(msg)) break;
         await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
       }
     }
@@ -190,11 +196,24 @@ function whyCity(c: CityLead, i: number, n: number, refs: string) {
 const reachScore = (c: CityLead) => c.affinity - Math.min(c.kmFromHome ?? 0, 9000) / 30000;
 const LONG_HAUL_KM = 5000;
 
-/** The best-scoring stops, with at most one long-haul city. */
-function pickStops(cities: CityLead[], n: number) {
+/** Qloo lists boroughs and neighbouring towns as separate cities (New York, Brooklyn, Newark);
+ * on a tour they are one market, so stops this close count as the same place. */
+const SAME_MARKET_KM = 60;
+const sameMarket = (a: CityLead, b: CityLead) => km(a, b) < SAME_MARKET_KM;
+
+/** Drop stops that repeat a market already on the run (or home), keeping the first. */
+function oneStopPerMarket(stops: CityLead[], home?: CityLead) {
+  const out: CityLead[] = [];
+  for (const c of stops) if (!(home && sameMarket(c, home)) && !out.some((o) => sameMarket(o, c))) out.push(c);
+  return out;
+}
+
+/** The best-scoring stops, one per market, with at most one long-haul city. */
+function pickStops(cities: CityLead[], n: number, home?: CityLead) {
   const out: CityLead[] = [];
   for (const c of [...cities].sort((a, b) => reachScore(b) - reachScore(a))) {
     if ((c.kmFromHome ?? 0) > LONG_HAUL_KM && out.some((o) => (o.kmFromHome ?? 0) > LONG_HAUL_KM)) continue;
+    if ((home && sameMarket(c, home)) || out.some((o) => sameMarket(o, c))) continue;
     out.push(c);
     if (out.length === n) break;
   }
@@ -213,7 +232,7 @@ async function rulesAgent(kit: Toolkit): Promise<Narrative> {
     s.billMates.some((b) => b.tier === "peer") ? null : kit.findBillMates({ tier: "peer", take: 8 }).catch(() => null),
     s.sponsors.length ? null : kit.findSponsors({ take: 8 }).catch(() => null),
   ]);
-  const pick = pickStops(s.cities, SHOWS - 1);
+  const pick = pickStops(s.cities, SHOWS - 1, s.home);
   if (s.home && !s.home.venues) await kit.scanCity({ city: s.home.name }).catch(() => null);
   for (const c of pick.slice(0, 4)) if (!c.venues) await kit.scanCity({ city: c.name }).catch(() => null);
 
@@ -245,8 +264,11 @@ function assemble(kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]):
 
   const homeName = s.home?.name.toLowerCase();
   const wanted = (n.route_cities ?? []).map((x) => x.toLowerCase()).filter((x) => x !== homeName);
-  let stops = s.cities.filter((c) => wanted.includes(c.name.toLowerCase()));
-  if (stops.length < 3) stops = pickStops(s.cities, SHOWS - 1);
+  let stops = oneStopPerMarket(
+    s.cities.filter((c) => wanted.includes(c.name.toLowerCase())),
+    s.home,
+  );
+  if (stops.length < 3) stops = pickStops(s.cities, SHOWS - 1, s.home);
   const routeCities = orderRoute(s.home ? [s.home, ...stops] : stops);
   const angles = new Map(n.sponsor_angles?.map((x) => [x.brand.toLowerCase(), x.angle]) ?? []);
 
