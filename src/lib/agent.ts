@@ -69,7 +69,7 @@ const FINALIZE: FunctionDeclaration = {
   description: "Call exactly once, after gathering data. Only reference cities, venues, acts and brands returned by the tools.",
   parametersJsonSchema: obj(
     {
-      headline: { type: "string", description: "Name for this first run, max 6 words, no hype words" },
+      headline: { type: "string", description: "Name for this first run, max 6 words, no hype words, no year (the dates are set later)" },
       summary: { type: "string", description: "2-3 plain sentences: the route's logic and the single most useful data-backed insight" },
       city_notes: {
         type: "array",
@@ -307,16 +307,20 @@ function assemble(kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]):
   }
   const routeCities = orderRoute(s.home ? [s.home, ...stops] : stops);
   const angles = new Map(n.sponsor_angles?.map((x) => [x.brand.toLowerCase(), x.angle]) ?? []);
+  const route = scheduleRoute(routeCities);
+  // The model names the run before the dates exist; a year in the title must match them.
+  const year = route[0]?.date.slice(0, 4);
+  const headline = year ? n.headline.replace(/20dd/g, year) : n.headline;
 
   return {
     artist: s.artist,
     refs: s.refs,
     dropped: s.dropped,
     home: s.home,
-    headline: n.headline,
+    headline,
     summary: n.summary,
     cities: s.cities,
-    route: scheduleRoute(routeCities),
+    route,
     billMates: s.billMates,
     sponsors: s.sponsors.map((b) => ({ ...b, angle: angles.get(b.name.toLowerCase()) })),
     audience: s.audience,
