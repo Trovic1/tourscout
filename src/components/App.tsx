@@ -52,8 +52,9 @@ export function App() {
 
       <footer className="mx-auto flex w-full max-w-[1208px] flex-wrap items-baseline justify-between gap-x-6 gap-y-2 px-4 py-8 text-[12px] text-faint sm:px-6">
         <span>
-          Fan data from Qloo&apos;s taste graph{plan?.dataSource === "qloo-mock" ? " (demo data)" : ""}. Routes planned by Gemini. Dates are proposals, not
-          confirmed holds.
+          Fan data from Qloo&apos;s taste graph{plan?.dataSource === "qloo-mock" ? " (demo data)" : ""}.{" "}
+          {plan ? (plan.reasoning === "llm" ? `Route planned by ${plan.model ?? "a language model"}.` : "Route planned by the rule-based planner.") : "Routes planned by an AI agent."} Dates are
+          proposals, not confirmed holds.
         </span>
         <a href="https://github.com/Trovic1/tourscout" className="text-muted hover:text-ink">
           Source on GitHub

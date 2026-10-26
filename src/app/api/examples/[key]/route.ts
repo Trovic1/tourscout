@@ -5,7 +5,7 @@ import type { AgentEvent } from "@/lib/types";
 
 /* The five example runs, planned ahead so they open instantly.
  *
- * Each is a full agent run (Qloo + Gemini), computed at build time and kept in the server's
+ * Each is a full agent run (Qloo + the configured model), computed at build time and kept in the server's
  * cache, then served as a static response. Qloo's hackathon guide allows private server-side
  * caching with no time limit but not Qloo data in a public repo, so nothing here is committed:
  * every deploy plans the examples afresh. */
@@ -16,7 +16,7 @@ export function generateStaticParams() {
   return EXAMPLES.map((x) => ({ key: x.key }));
 }
 
-// One example at a time: five agent runs at once would trip Gemini's free-tier rate limit.
+// One example at a time: five agent runs at once would trip a free-tier model's rate limit.
 let queue: Promise<unknown> = Promise.resolve();
 
 async function examplePlan(key: string): Promise<{ ok: boolean; events: AgentEvent[] }> {

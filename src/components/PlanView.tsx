@@ -155,7 +155,7 @@ export function PlanView({ plan, steps, notes, state }: Props) {
               How this was planned
             </h2>
             <p className="text-[12px] text-faint">
-              {steps.length} Qloo calls · {plan.reasoning === "gemini" ? "Gemini chose the route" : "rule-based planner"}
+              {steps.length} Qloo calls · {plan.reasoning === "llm" ? `${plan.model ?? "The model"} chose the route` : "the rule-based planner chose the route"}
             </p>
             <details className="mt-2">
               <summary className="cursor-pointer text-[14px] text-muted hover:text-ink">Show every step</summary>

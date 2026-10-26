@@ -17,7 +17,7 @@ Qloo lists many acts it holds no fan data for. TourScout checks every reference 
 
 ## Why it needs Qloo
 
-An LLM on its own can only guess where an unknown Lagos singer should play. TourScout's agent **never invents a city, venue, act or brand**: every entity in the plan comes from a Qloo call, and Gemini only orchestrates those calls and writes the words. Remove Qloo and nothing is left to plan with.
+An LLM on its own can only guess where an unknown Lagos singer should play. TourScout's agent **never invents a city, venue, act or brand**: every entity in the plan comes from a Qloo call, and the model only orchestrates those calls and writes the words. Remove Qloo and nothing is left to plan with.
 
 | Agent step | Qloo call |
 | --- | --- |
@@ -32,7 +32,12 @@ An LLM on its own can only guess where an unknown Lagos singer should play. Tour
 ## How it works
 
 - **Next.js 16** (App Router) and **Tailwind v4**. The page streams the agent's progress as NDJSON, so you watch every Qloo call land.
-- **Gemini** (`gemini-flash-lite-latest`, the fastest at tool calls) runs a function-calling loop over the Qloo tools and finishes with `finalize_plan`. When Gemini is busy it retries and falls back across Flash models; if all are unavailable, a **rule-based planner** completes the same run on the same Qloo data.
+- **Bring your own model.** A language model runs a function-calling loop over the Qloo tools and finishes with `finalize_plan`. It can be:
+  - **any OpenAI-compatible API** (OpenAI, Claude through Anthropic's compatibility endpoint, Groq, OpenRouter, Mistral, a local Ollama model...), set with `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MODEL`;
+  - **Google Gemini**, set with `GEMINI_API_KEY` (the hosted demo uses `gemini-flash-lite-latest`, the fastest at tool calls);
+  - **no model at all**: a rule-based planner builds the plan from the same Qloo data.
+
+  Whichever model you use gets a 70-second budget and retries on rate limits; if it fails or runs out of time, the rule-based planner finishes the run, so a plan always arrives. Each plan shows which model made it.
 - Qloo responses are cached briefly on the server (allowed by the hackathon terms) and never committed to this repo.
 - Example runs open directly: `/?example=lagos`, `london`, `atlanta`, `nairobi`, `accra`.
 
@@ -40,11 +45,11 @@ An LLM on its own can only guess where an unknown Lagos singer should play. Tour
 
 ```bash
 npm install
-cp .env.example .env.local   # add QLOO_API_KEY and GEMINI_API_KEY
+cp .env.example .env.local   # add QLOO_API_KEY, then pick a model option (see the comments)
 npm run dev
 ```
 
-With no keys, the app runs on built-in demo data shaped like Qloo's responses and says so in the footer.
+`.env.example` explains the three model options. With no Qloo key, the app runs on built-in demo data shaped like Qloo's responses and says so in the footer.
 
 ## License
 

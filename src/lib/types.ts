@@ -92,7 +92,10 @@ export interface TourPlan {
   audience?: AudienceProfile;
   pitches: { venue: string; sponsor: string };
   dataSource: "qloo-live" | "qloo-mock";
-  reasoning: "gemini" | "rules";
+  /** "llm" when a language model chose the route and wrote the words; "rules" for the rule-based planner */
+  reasoning: "llm" | "rules";
+  /** The model that planned it, e.g. "gemini-flash-lite-latest" (absent for the rule-based planner) */
+  model?: string;
   /** When the agent produced this plan (examples are planned ahead and cached) */
   plannedAt: string;
 }

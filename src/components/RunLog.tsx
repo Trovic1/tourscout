@@ -39,7 +39,7 @@ export function RunLog({ steps, state, notes }: { steps: TraceStep[]; state: Run
         )}
       </ol>
       {fallback && (
-        <p className="mt-2 text-[13px] text-faint">Gemini was busy, so the rule-based planner wrote this plan from the same Qloo data.</p>
+        <p className="mt-2 text-[13px] text-faint">The language model was unavailable, so the rule-based planner wrote this plan from the same Qloo data.</p>
       )}
     </div>
   );

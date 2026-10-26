@@ -5,11 +5,24 @@ import type { AgentEvent, CityLead, Entity, TourPlan } from "./types";
 
 // Flash-Lite answers tool calls in 1-3 s; the full Flash model was taking 20-40 s per turn on the
 // free tier, which pushed whole runs past their time budget.
-const MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-lite-latest";
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-lite-latest";
 const MAX_TURNS = 10;
-/** Gemini gets this long in total; after that the rule-based planner finishes from the data
+/** The model gets this long in total; after that the rule-based planner finishes from the data
  * already gathered, so a slow model can never push a run past the server's time limit. */
-const GEMINI_BUDGET_MS = 70_000;
+const LLM_BUDGET_MS = 70_000;
+
+/** Which model plans the route. Any OpenAI-compatible API (OpenAI, Anthropic's compatibility
+ * endpoint, Groq, OpenRouter, a local Ollama...) takes precedence when configured; otherwise
+ * Gemini if its key is set; otherwise none, and the rule-based planner does the whole run. */
+type Provider = { kind: "openai"; baseUrl: string; apiKey: string; model: string } | { kind: "gemini" };
+
+function llmProvider(): Provider | null {
+  const baseUrl = process.env.LLM_BASE_URL?.trim();
+  const model = process.env.LLM_MODEL?.trim();
+  if (baseUrl && model) return { kind: "openai", baseUrl: baseUrl.replace(/\/+$/, ""), apiKey: process.env.LLM_API_KEY?.trim() ?? "", model };
+  if (process.env.GEMINI_API_KEY?.trim()) return { kind: "gemini" };
+  return null;
+}
 /** A first run: home plus this many shows. */
 const SHOWS = 6;
 
@@ -98,6 +111,7 @@ Rules:
 - This is a first run on a small budget: ${SHOWS - 1}-${SHOWS} shows plus opening night at home. Favour cities reachable by road or a short flight (see kmFromHome). Include a long-haul city only if its affinity is clearly exceptional, and at most one.
 - Small rooms, not arenas. Bigger acts are people to open for, not peers.
 - Affinity and reach are 0-100; quote them that way ("affinity 94"), never as decimals.
+- Qloo measures taste affinity, not plays. Never mention streams, streaming, listeners, plays, sales or press, in notes or emails.
 - Write like a booking agent talking to a friend: plain, specific, no hype.
 - Call independent tools in parallel.
 
@@ -116,23 +130,34 @@ async function dispatch(kit: Toolkit, name: string, args: Record<string, unknown
   }
 }
 
+const transient = (msg: string) => /\b(429|500|502|503|504)\b|high demand|overloaded|deadline|unavailable|fetch failed|timed? ?out|aborted/i.test(msg);
+const rateLimited = (msg: string) => /\b429\b|quota|rate.?limit/i.test(msg);
+const NUDGE = "Call the remaining tools you need, then finalize_plan.";
+
+/** What a model run hands back: the narrative, and the model that actually wrote it. */
+interface LlmResult {
+  narrative: Narrative;
+  model: string;
+}
+
+/* ------------------------------- Gemini ------------------------------- */
+
 // Flash models hit "high demand" 503s at peak times; retry once, then try the next model.
-const MODELS = [...new Set([MODEL, "gemini-3-flash-preview", "gemini-flash-latest"])];
-const transient = (msg: string) => /\b(429|500|503|504)\b|high demand|overloaded|deadline|unavailable|fetch failed/i.test(msg);
+const GEMINI_MODELS = [...new Set([GEMINI_MODEL, "gemini-3-flash-preview", "gemini-flash-latest"])];
 
 async function generate(ai: GoogleGenAI, req: Omit<Parameters<GoogleGenAI["models"]["generateContent"]>[0], "model">, deadline: number) {
   let last: unknown;
-  for (const model of MODELS) {
+  for (const model of GEMINI_MODELS) {
     for (let attempt = 0; attempt < 2; attempt++) {
       if (Date.now() > deadline) throw new Error("time budget spent");
       try {
-        return await ai.models.generateContent({ ...req, model });
+        return { res: await ai.models.generateContent({ ...req, model }), model };
       } catch (err) {
         last = err;
         const msg = err instanceof Error ? err.message : String(err);
         if (!transient(msg)) throw err;
         // A rate limit will not clear in a second; move straight to the next model.
-        if (/429|quota|rate/i.test(msg)) break;
+        if (rateLimited(msg)) break;
         await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
       }
     }
@@ -140,18 +165,16 @@ async function generate(ai: GoogleGenAI, req: Omit<Parameters<GoogleGenAI["model
   throw last;
 }
 
-async function geminiAgent(req: PlanRequest, kit: Toolkit, emit: Emit): Promise<Narrative | null> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return null;
+async function geminiAgent(req: PlanRequest, kit: Toolkit, emit: Emit): Promise<LlmResult | null> {
   // A hung connection should fall back to the rule-based planner fast, not stall the run.
-  const ai = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 25000 } });
-  const deadline = Date.now() + GEMINI_BUDGET_MS;
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY!.trim(), httpOptions: { timeout: 25000 } });
+  const deadline = Date.now() + LLM_BUDGET_MS;
   const tools = [{ functionDeclarations: [...TOOLS, FINALIZE] }];
   const contents: Content[] = [{ role: "user", parts: [{ text: "Plan the first tour." }] }];
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     if (Date.now() > deadline) throw new Error("time budget spent");
-    const res = await generate(ai, { contents, config: { systemInstruction: systemPrompt(req, kit), tools, temperature: 0.4 } }, deadline);
+    const { res, model } = await generate(ai, { contents, config: { systemInstruction: systemPrompt(req, kit), tools, temperature: 0.4 } }, deadline);
     const parts = res.candidates?.[0]?.content?.parts ?? [];
     contents.push({ role: "model", parts });
     const text = parts.map((p) => p.text).filter(Boolean).join(" ").trim();
@@ -159,11 +182,11 @@ async function geminiAgent(req: PlanRequest, kit: Toolkit, emit: Emit): Promise<
 
     const calls = res.functionCalls ?? [];
     if (!calls.length) {
-      contents.push({ role: "user", parts: [{ text: "Call the remaining tools you need, then finalize_plan." }] });
+      contents.push({ role: "user", parts: [{ text: NUDGE }] });
       continue;
     }
     const fin = calls.find((c) => c.name === "finalize_plan");
-    if (fin) return fin.args as unknown as Narrative;
+    if (fin) return { narrative: fin.args as unknown as Narrative, model };
 
     const responses = await Promise.all(
       calls.map(async (c) => {
@@ -179,6 +202,98 @@ async function geminiAgent(req: PlanRequest, kit: Toolkit, emit: Emit): Promise<
   }
   return null;
 }
+
+/* ------------------------ Any OpenAI-compatible API ------------------------ */
+
+type OpenAiProvider = Extract<Provider, { kind: "openai" }>;
+
+interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
+type ChatMessage =
+  | { role: "system" | "user"; content: string }
+  | { role: "assistant"; content: string | null; tool_calls?: ToolCall[] }
+  | { role: "tool"; tool_call_id: string; content: string };
+
+/** One chat completion, retried on rate limits and server errors while the budget allows. */
+async function chat(p: OpenAiProvider, body: Record<string, unknown>, deadline: number) {
+  let last: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const left = deadline - Date.now();
+    if (left <= 0) throw new Error("time budget spent");
+    try {
+      const res = await fetch(`${p.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(p.apiKey ? { authorization: `Bearer ${p.apiKey}` } : {}) },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(Math.min(30_000, left)),
+      });
+      if (!res.ok) throw new Error(`model API ${res.status}: ${(await res.text().catch(() => "")).slice(0, 160)}`);
+      return (await res.json()) as { choices?: { message?: { content?: string | null; tool_calls?: ToolCall[] } }[] };
+    } catch (err) {
+      last = err;
+      if (!transient(err instanceof Error ? err.message : String(err))) throw err;
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
+  throw last;
+}
+
+/** Models send tool arguments as a JSON string; a malformed one becomes empty arguments, not a crash. */
+function parseArgs(raw: string | undefined): Record<string, unknown> {
+  try {
+    const v = JSON.parse(raw || "{}");
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+async function openAiAgent(req: PlanRequest, kit: Toolkit, emit: Emit, p: OpenAiProvider): Promise<LlmResult | null> {
+  const deadline = Date.now() + LLM_BUDGET_MS;
+  const tools = [...TOOLS, FINALIZE].map((t) => ({
+    type: "function",
+    function: { name: t.name, description: t.description, parameters: t.parametersJsonSchema },
+  }));
+  const messages: ChatMessage[] = [
+    { role: "system", content: systemPrompt(req, kit) },
+    { role: "user", content: "Plan the first tour." },
+  ];
+
+  for (let turn = 0; turn < MAX_TURNS; turn++) {
+    const data = await chat(p, { model: p.model, messages, tools, tool_choice: "auto", temperature: 0.4 }, deadline);
+    const msg = data.choices?.[0]?.message;
+    if (!msg) throw new Error("the model returned no message");
+    const calls = msg.tool_calls ?? [];
+    messages.push({ role: "assistant", content: msg.content ?? null, ...(calls.length ? { tool_calls: calls } : {}) });
+    if (msg.content?.trim()) emit({ type: "thought", text: msg.content.trim().slice(0, 400) });
+
+    if (!calls.length) {
+      messages.push({ role: "user", content: NUDGE });
+      continue;
+    }
+    const fin = calls.find((c) => c.function?.name === "finalize_plan");
+    if (fin) return { narrative: parseArgs(fin.function.arguments) as unknown as Narrative, model: p.model };
+
+    // Every tool call gets a reply, even a failed one: most APIs reject a turn that leaves one unanswered.
+    const replies = await Promise.all(
+      calls.map(async (c): Promise<ChatMessage> => {
+        try {
+          const result = await dispatch(kit, c.function.name, parseArgs(c.function.arguments));
+          return { role: "tool", tool_call_id: c.id, content: JSON.stringify({ result }) };
+        } catch (err) {
+          return { role: "tool", tool_call_id: c.id, content: JSON.stringify({ error: err instanceof Error ? err.message : String(err) }) };
+        }
+      }),
+    );
+    messages.push(...replies);
+  }
+  return null;
+}
+
 
 /* ---------- deterministic fallback: same tools, template narrative ---------- */
 
@@ -240,7 +355,7 @@ function sponsorTemplate(kit: Toolkit) {
 function misstatesFans(text: string, kit: Toolkit) {
   const others = kit.state.billMates.map((b) => b.name).filter((n) => !kit.state.refs.some((r) => r.name === n));
   return text
-    .split(/(?<=[.!?])s+/)
+    .split(/(?<=[.!?])\s+/)
     .some((sentence) => /fans of|audience|listeners|fanbase/i.test(sentence) && others.some((n) => sentence.includes(n)));
 }
 
@@ -278,7 +393,7 @@ async function rulesAgent(kit: Toolkit): Promise<Narrative> {
 /** Models sometimes write line breaks as a literal backslash-n inside function arguments. */
 const unescape = (s = "") => s.replace(/\\n/g, "\n").trim();
 
-function assemble(kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]): TourPlan {
+function assemble(kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"], model?: string): TourPlan {
   const s = kit.state;
   const refs = s.refs.map((r) => r.name).join(" + ");
   const notes = new Map(n.city_notes?.map((c) => [c.city.toLowerCase(), c.why]) ?? []);
@@ -310,7 +425,7 @@ function assemble(kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]):
   const route = scheduleRoute(routeCities);
   // The model names the run before the dates exist; a year in the title must match them.
   const year = route[0]?.date.slice(0, 4);
-  const headline = year ? n.headline.replace(/20dd/g, year) : n.headline;
+  const headline = year ? n.headline.replace(/\b20\d\d\b/g, year) : n.headline;
 
   return {
     artist: s.artist,
@@ -330,6 +445,7 @@ function assemble(kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]):
     },
     dataSource: kit.q.live ? "qloo-live" : "qloo-mock",
     reasoning,
+    model,
     plannedAt: new Date().toISOString(),
   };
 }
@@ -344,19 +460,24 @@ export async function planTour(req: PlanRequest, emit: Emit) {
   if (refsOk.status === "rejected") throw refsOk.reason;
 
   let narrative: Narrative | null = null;
-  let reasoning: TourPlan["reasoning"] = "gemini";
+  let reasoning: TourPlan["reasoning"] = "llm";
+  let model: string | undefined;
+  const provider = llmProvider();
   try {
-    narrative = await geminiAgent(req, kit, emit);
+    const out = provider?.kind === "openai" ? await openAiAgent(req, kit, emit, provider) : provider?.kind === "gemini" ? await geminiAgent(req, kit, emit) : null;
+    narrative = out?.narrative ?? null;
+    model = out?.model;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     emit({ type: "status", message: `Reasoning model unavailable (${msg.slice(0, 80)}); continuing with rule-based planner` });
   }
   if (!narrative) {
     reasoning = "rules";
+    model = undefined;
     narrative = await rulesAgent(kit);
   }
   // Make sure the essentials exist even if the model skipped a tool.
   if (!kit.state.cities.length) await kit.rankCities({ take: 20 });
   if (!kit.state.cities.length) throw new Error("Qloo returned no cities for these acts. Try adding a better-known reference act.");
-  emit({ type: "plan", plan: assemble(kit, narrative, reasoning) });
+  emit({ type: "plan", plan: assemble(kit, narrative, reasoning, model) });
 }
