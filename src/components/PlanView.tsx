@@ -52,6 +52,7 @@ export function PlanView({ plan, steps, notes, state }: Props) {
           <p className="mt-1 text-[12px] text-faint">
             {plan.artist ? `${plan.artist} · ` : ""}based in {home?.name ?? "—"} · sounds like {refs}
             {plan.dropped.length ? ` · ${refList(plan.dropped.map((d) => d.name))} left out (no fan data in Qloo)` : ""}
+            {plan.plannedAt ? ` · planned ${new Date(plan.plannedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}
           </p>
         </div>
         <CopyRun plan={plan} run={run} />

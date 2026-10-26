@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useAgent } from "./useAgent";
-import { EXAMPLES } from "@/lib/examples";
+import { EXAMPLES, type Example } from "@/lib/examples";
 import { Intake } from "./Intake";
 import { PlanView } from "./PlanView";
 
@@ -10,7 +10,7 @@ export function App() {
   const agent = useAgent();
   const { plan, state } = agent;
   const showPlan = plan && state !== "running";
-  const { run } = agent;
+  const { openExample } = agent;
   const startOver = () => {
     window.history.replaceState(null, "", "/");
     agent.reset();
@@ -20,8 +20,13 @@ export function App() {
   useEffect(() => {
     const key = new URLSearchParams(window.location.search).get("example")?.toLowerCase();
     const ex = EXAMPLES.find((x) => x.home.toLowerCase() === key);
-    if (ex) run({ home: ex.home, refs: ex.refs });
-  }, [run]);
+    if (ex) openExample(ex);
+  }, [openExample]);
+
+  const pickExample = (ex: Example) => {
+    window.history.replaceState(null, "", `/?example=${ex.key}`);
+    openExample(ex);
+  };
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -41,7 +46,7 @@ export function App() {
         {showPlan ? (
           <PlanView plan={plan} steps={agent.steps} notes={agent.notes} state={state} />
         ) : (
-          <Intake state={state} steps={agent.steps} notes={agent.notes} error={agent.error} onPlan={agent.run} />
+          <Intake state={state} steps={agent.steps} notes={agent.notes} error={agent.error} onPlan={agent.run} onExample={pickExample} />
         )}
       </div>
 

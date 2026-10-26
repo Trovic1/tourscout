@@ -2,6 +2,8 @@
  * data in Qloo (many listed acts don't). The artists themselves are left unnamed on purpose:
  * these are the kind of people TourScout is for. */
 export interface Example {
+  /** URL key: /?example=lagos, /api/examples/lagos */
+  key: string;
   home: string;
   who: string;
   refs: { id: string; name: string }[];
@@ -9,6 +11,7 @@ export interface Example {
 
 export const EXAMPLES: Example[] = [
   {
+    key: "lagos",
     home: "Lagos",
     who: "An Afro-R&B singer",
     refs: [
@@ -17,6 +20,7 @@ export const EXAMPLES: Example[] = [
     ],
   },
   {
+    key: "london",
     home: "London",
     who: "A soul singer-songwriter",
     refs: [
@@ -25,6 +29,7 @@ export const EXAMPLES: Example[] = [
     ],
   },
   {
+    key: "atlanta",
     home: "Atlanta",
     who: "A rapper",
     refs: [
@@ -33,6 +38,7 @@ export const EXAMPLES: Example[] = [
     ],
   },
   {
+    key: "nairobi",
     home: "Nairobi",
     who: "An Afro-pop band",
     refs: [
@@ -41,6 +47,7 @@ export const EXAMPLES: Example[] = [
     ],
   },
   {
+    key: "accra",
     home: "Accra",
     who: "An alté singer",
     refs: [

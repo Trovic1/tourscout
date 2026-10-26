@@ -272,6 +272,16 @@ function assemble(kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]):
     s.home,
   );
   if (stops.length < 3) stops = pickStops(s.cities, SHOWS - 1, s.home);
+  // Smaller models sometimes pick only two or three cities; top a short run up to a full first
+  // run with the best reachable markets they left out, still one stop per market.
+  if (stops.length < SHOWS - 1) {
+    const extra = pickStops(
+      s.cities.filter((c) => !stops.some((x) => sameMarket(x, c))),
+      SHOWS - 1 - stops.length,
+      s.home,
+    ).filter((c) => !(c.kmFromHome !== undefined && c.kmFromHome > LONG_HAUL_KM && stops.some((x) => (x.kmFromHome ?? 0) > LONG_HAUL_KM)));
+    stops = [...stops, ...extra];
+  }
   const routeCities = orderRoute(s.home ? [s.home, ...stops] : stops);
   const angles = new Map(n.sponsor_angles?.map((x) => [x.brand.toLowerCase(), x.angle]) ?? []);
 
@@ -290,6 +300,7 @@ function assemble(kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]):
     pitches: { venue: unescape(n.venue_pitch), sponsor: unescape(n.sponsor_pitch) },
     dataSource: kit.q.live ? "qloo-live" : "qloo-mock",
     reasoning,
+    plannedAt: new Date().toISOString(),
   };
 }
 

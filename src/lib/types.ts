@@ -93,6 +93,8 @@ export interface TourPlan {
   pitches: { venue: string; sponsor: string };
   dataSource: "qloo-live" | "qloo-mock";
   reasoning: "gemini" | "rules";
+  /** When the agent produced this plan (examples are planned ahead and cached) */
+  plannedAt: string;
 }
 
 export type AgentEvent =

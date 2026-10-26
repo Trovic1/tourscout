@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ActPicker, type PickedAct } from "./ActPicker";
 import { RunLog } from "./RunLog";
 import type { PlanInput, RunState, TraceStep } from "./useAgent";
-import { EXAMPLES } from "@/lib/examples";
+import { EXAMPLES, type Example } from "@/lib/examples";
 import { refList } from "@/lib/present";
 
 const OFFERS = [
@@ -21,9 +21,10 @@ interface Props {
   notes: string[];
   error: string | null;
   onPlan: (input: PlanInput) => void;
+  onExample: (ex: Example) => void;
 }
 
-export function Intake({ state, steps, notes, error, onPlan }: Props) {
+export function Intake({ state, steps, notes, error, onPlan, onExample }: Props) {
   const [artist, setArtist] = useState("");
   const [home, setHome] = useState("");
   const [refs, setRefs] = useState<PickedAct[]>([]);
@@ -111,7 +112,7 @@ export function Intake({ state, steps, notes, error, onPlan }: Props) {
                 <li key={x.home}>
                   <button
                     type="button"
-                    onClick={() => onPlan({ home: x.home, refs: x.refs })}
+                    onClick={() => onExample(x)}
                     className="group flex min-h-[63px] w-full items-center gap-4 rounded-[14px] bg-raised px-4 py-3 text-left transition-colors hover:bg-[#242424]"
                   >
                     <span className="flex flex-none -space-x-2.5" aria-hidden>
