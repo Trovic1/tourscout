@@ -23,5 +23,6 @@ Qloo Agentic Hackathon · deadline **Oct 30, 2026, 11:45 pm ET** (Oct 31, 04:45 
 - [x] Front end redesigned with the taste skill (true-black flat, amber route); inspector 0 FAIL on both screens
 - [x] Example runs planned at build time on Vercel (server cache, nothing committed); open instantly
 - [x] Devpost draft + 7 screenshots in devpost/ (git-ignored: they show Qloo data)
-- [ ] Update GitHub About line; paste draft into Devpost and submit before Fri 30 Oct, 11:45 pm ET
+- [x] GitHub About line updated to the new positioning
+- [ ] Paste draft into Devpost and submit before Fri 30 Oct, 11:45 pm ET
 - [ ] Pitch prep in case we make the top 3 (live show Nov 5)
