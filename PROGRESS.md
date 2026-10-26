@@ -21,5 +21,7 @@ Qloo Agentic Hackathon · deadline **Oct 30, 2026, 11:45 pm ET** (Oct 31, 04:45 
 - [x] Keys in Vercel production env; redeployed and re-tested (Burna Boy, Tems, Asake, London, Atlanta)
 - [x] Repositioned for emerging artists: plan from "sounds like" acts + home city; promoter mode dropped
 - [x] Front end redesigned with the taste skill (true-black flat, amber route); inspector 0 FAIL on both screens
-- [ ] Devpost submission text + screenshots
+- [x] Example runs planned at build time on Vercel (server cache, nothing committed); open instantly
+- [x] Devpost draft + 7 screenshots in devpost/ (git-ignored: they show Qloo data)
+- [ ] Update GitHub About line; paste draft into Devpost and submit before Fri 30 Oct, 11:45 pm ET
 - [ ] Pitch prep in case we make the top 3 (live show Nov 5)
