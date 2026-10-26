@@ -94,6 +94,7 @@ The artist${s.artist ? `, ${s.artist},` : ""} is based in ${home}. They sound li
 
 Rules:
 - Every claim comes from the tools. Never invent cities, venues, acts, brands or numbers.
+- The fan data comes from ${refs} only. When an email or note says whose fans over-index somewhere, name only those acts. Acts from find_bill_mates are people to open for or share bills with, never part of the fan data.
 - This is a first run on a small budget: ${SHOWS - 1}-${SHOWS} shows plus opening night at home. Favour cities reachable by road or a short flight (see kmFromHome). Include a long-haul city only if its affinity is clearly exceptional, and at most one.
 - Small rooms, not arenas. Bigger acts are people to open for, not peers.
 - Affinity and reach are 0-100; quote them that way ("affinity 94"), never as decimals.
@@ -220,6 +221,29 @@ function pickStops(cities: CityLead[], n: number, home?: CityLead) {
   return out;
 }
 
+function venueTemplate(kit: Toolkit) {
+  const who = kit.who === "this artist" ? "an artist I manage" : kit.who;
+  const refs = kit.state.refs.map((r) => r.name).join(" + ");
+  return `Hi, I'm booking a first run for ${who}, whose sound sits close to ${refs}. Qloo's taste data shows fans of those acts over-index in your city, and your room matches them better than most. We're looking at a weeknight in the window below and can bring a local support act. Could we talk about a date?`;
+}
+
+function sponsorTemplate(kit: Toolkit) {
+  const s = kit.state;
+  const refs = s.refs.map((r) => r.name).join(" + ");
+  const brand = s.sponsors[0];
+  return `Hi, ${brand?.name ?? "your brand"}'s customers and fans of ${refs} overlap more than almost any other brand we checked. ${kit.who === "this artist" ? "We're" : `${kit.who} is`} playing a first run of small rooms${s.home ? ` starting in ${s.home.name}` : ""}. Would you support it with product for the shows in return for presence at the merch table and on our posts?`;
+}
+
+/** The fan data comes from the reference acts only. An email that names another act as part of
+ * that audience (a bill-mate slipped into "fans of X, Y and Z") misstates the data, so it is
+ * replaced by the plain template. Naming a bill-mate elsewhere, e.g. as a support target, is fine. */
+function misstatesFans(text: string, kit: Toolkit) {
+  const others = kit.state.billMates.map((b) => b.name).filter((n) => !kit.state.refs.some((r) => r.name === n));
+  return text
+    .split(/(?<=[.!?])s+/)
+    .some((sentence) => /fans of|audience|listeners|fanbase/i.test(sentence) && others.some((n) => sentence.includes(n)));
+}
+
 async function rulesAgent(kit: Toolkit): Promise<Narrative> {
   const s = kit.state;
   await Promise.all([
@@ -240,14 +264,13 @@ async function rulesAgent(kit: Toolkit): Promise<Narrative> {
   const who = kit.who;
   const top = [...pick].sort((a, b) => b.affinity - a.affinity)[0];
   const support = s.billMates.find((b) => b.tier === "support");
-  const brand = s.sponsors[0];
   return {
     headline: s.home ? `${who === "this artist" ? "First run" : who}: ${s.home.name} and out` : `${who}: first run`,
     summary: `Fans of ${refs} over-index most in ${top?.name ?? "these cities"} (affinity ${Math.round((top?.affinity ?? 0) * 100)}). The route opens at home and stays mostly within reach, so the first run can pay for itself.${support ? ` ${support.name}'s audience overlaps closely: their tour is the one to ask for a support slot on.` : ""}`,
     city_notes: pick.map((c) => ({ city: c.name, why: whyCity(c, s.cities.indexOf(c), s.cities.length, refs) })),
     route_cities: pick.map((c) => c.name),
-    venue_pitch: `Hi, I'm booking a first run for ${who === "this artist" ? "an artist I manage" : who}, whose sound sits close to ${refs}. Qloo's taste data shows fans of those acts over-index in your city, and your room matches them better than most. We're looking at a weeknight in the window below and can bring a local support act. Could we talk about a date?`,
-    sponsor_pitch: `Hi, ${brand?.name ?? "your brand"}'s customers and fans of ${refs} overlap more than almost any other brand we checked. ${who === "this artist" ? "We're" : `${who} is`} playing a first run of small rooms${s.home ? ` starting in ${s.home.name}` : ""}. Would you support it with product for the shows in return for presence at the merch table and on our posts?`,
+    venue_pitch: venueTemplate(kit),
+    sponsor_pitch: sponsorTemplate(kit),
     sponsor_angles: s.sponsors.slice(0, 4).map((b) => ({ brand: b.name, angle: "Product at the shows in exchange for merch-table presence" })),
   };
 }
@@ -297,7 +320,10 @@ function assemble(kit: Toolkit, n: Narrative, reasoning: TourPlan["reasoning"]):
     billMates: s.billMates,
     sponsors: s.sponsors.map((b) => ({ ...b, angle: angles.get(b.name.toLowerCase()) })),
     audience: s.audience,
-    pitches: { venue: unescape(n.venue_pitch), sponsor: unescape(n.sponsor_pitch) },
+    pitches: {
+      venue: misstatesFans(unescape(n.venue_pitch), kit) ? venueTemplate(kit) : unescape(n.venue_pitch),
+      sponsor: misstatesFans(unescape(n.sponsor_pitch), kit) ? sponsorTemplate(kit) : unescape(n.sponsor_pitch),
+    },
     dataSource: kit.q.live ? "qloo-live" : "qloo-mock",
     reasoning,
     plannedAt: new Date().toISOString(),

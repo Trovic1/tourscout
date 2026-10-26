@@ -33,14 +33,19 @@ export function PlanView({ plan, steps, notes, state }: Props) {
   // The one finding: where these fans over-index most, against home.
   const top = [...run].filter((c) => !c.home).sort((a, b) => b.affinity - a.affinity)[0];
   const home = plan.home;
+  // Compare the scores as printed, so the sentence never contradicts its own numbers.
+  const topScore = score(top?.affinity) ?? 0;
+  const homeScore = score(home?.affinity) ?? 0;
   const finding =
-    top && home && home.affinity && top.affinity > home.affinity
-      ? `Fans of ${refs} over-index more in ${top.name} (${score(top.affinity)}) than at home in ${home.name} (${score(home.affinity)}).`
-      : top && home && home.affinity
-        ? `Home is already the strongest market: fans of ${refs} over-index in ${home.name} (${score(home.affinity)}), then ${top.name} (${score(top.affinity)}).`
-        : top
-          ? `Fans of ${refs} over-index most in ${top.name}, affinity ${score(top.affinity)} out of 100.`
-          : plan.summary;
+    top && home && homeScore && topScore > homeScore
+      ? `Fans of ${refs} over-index more in ${top.name} (${topScore}) than at home in ${home.name} (${homeScore}).`
+      : top && home && homeScore && topScore === homeScore
+        ? `Fans of ${refs} over-index as much in ${top.name} as at home in ${home.name} (both ${homeScore}).`
+        : top && home && homeScore
+          ? `Home is already the strongest market: fans of ${refs} over-index in ${home.name} (${homeScore}), then ${top.name} (${topScore}).`
+          : top
+            ? `Fans of ${refs} over-index most in ${top.name}, affinity ${topScore} out of 100.`
+            : plan.summary;
 
   return (
     <main className="mx-auto w-full max-w-[1208px] px-4 pt-8 pb-16 sm:px-6">

@@ -57,3 +57,6 @@ shots/
 
 # design tooling output
 .taste-skill/
+
+# submission assets: screenshots show Qloo data, which must not go in a public repo
+devpost/

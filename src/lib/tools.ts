@@ -21,6 +21,16 @@ export interface ToolState {
 
 type Emit = (e: AgentEvent) => void;
 
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const regions = new Intl.DisplayNames(["en"], { type: "region" });
+const countryName = (code: string) => {
+  try {
+    return regions.of(code.toUpperCase()) ?? code;
+  } catch {
+    return code;
+  }
+};
+
 export class Toolkit {
   q: QlooSource = qloo();
   state: ToolState;
@@ -104,7 +114,7 @@ export class Toolkit {
 
   async rankCities({ take = 14, countryCode, minPopularity = 0.6 }: { take?: number; countryCode?: string; minPopularity?: number }) {
     const label = countryCode
-      ? `Ranking ${countryCode} cities by how much they like ${this.refNames}`
+      ? `Ranking cities in ${countryName(countryCode)} by how much they like ${this.refNames}`
       : `Ranking world cities where fans of ${this.refNames} cluster`;
     return this.run("rank_cities", label, { take, countryCode }, async () => {
       const ents = await this.q.insights({
@@ -148,7 +158,7 @@ export class Toolkit {
       this.state.cities.sort((a, b) => b.affinity - a.affinity);
       return [
         leads.map(({ name, country, affinity, kmFromHome }) => ({ name, country, affinity: Math.round(affinity * 100), kmFromHome })),
-        leads.length ? `${leads.length} cities · top: ${leads.slice(0, 3).map((l) => l.name).join(", ")}` : "no cities with a taste match",
+        leads.length ? `${plural(leads.length, "city", "cities")} · top: ${leads.slice(0, 3).map((l) => l.name).join(", ")}` : "no cities with a taste match",
       ];
     });
   }
@@ -187,7 +197,7 @@ export class Toolkit {
           hotspots: hotspots.slice(0, 3).map((h) => ({ lat: +h.lat.toFixed(3), lng: +h.lng.toFixed(3), affinity: Math.round(h.affinity * 100) })),
           venues: venues.map((v) => ({ name: v.name, affinity: v.affinity === undefined ? undefined : Math.round(v.affinity * 100), neighborhood: v.neighborhood })),
         },
-        `${hotspots.length} fan hotspots · ${venues.length} rooms${venues[0] ? ` (best: ${venues[0].name})` : ""}`,
+        `${plural(hotspots.length, "fan hotspot")} · ${plural(venues.length, "room")}${venues[0] ? ` (best: ${venues[0].name})` : ""}`,
       ];
     });
   }
@@ -212,7 +222,7 @@ export class Toolkit {
       this.state.billMates.push(...fresh);
       return [
         fresh.map((e) => ({ name: e.name, affinity: e.affinity === undefined ? undefined : Math.round(e.affinity * 100), reach: e.popularity === undefined ? undefined : Math.round(e.popularity * 100) })),
-        `${fresh.length} acts · ${fresh.slice(0, 3).map((e) => e.name).join(", ")}`,
+        `${plural(fresh.length, "act")} · ${fresh.slice(0, 3).map((e) => e.name).join(", ")}`,
       ];
     });
   }
@@ -223,7 +233,7 @@ export class Toolkit {
       this.state.sponsors = ents;
       return [
         ents.map((e) => ({ name: e.name, affinity: e.affinity === undefined ? undefined : Math.round(e.affinity * 100) })),
-        `${ents.length} brands · ${ents.slice(0, 3).map((e) => e.name).join(", ")}`,
+        `${plural(ents.length, "brand")} · ${ents.slice(0, 3).map((e) => e.name).join(", ")}`,
       ];
     });
   }
